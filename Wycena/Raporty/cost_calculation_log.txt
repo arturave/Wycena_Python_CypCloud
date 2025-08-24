@@ -1,4 +1,4 @@
-Log obliczeń - 2025-08-24 20:14:17.441809
+Log obliczeń - 2025-08-24 21:44:20.631224
 Folder: C:/Users/artur/source/repos/Wycena_Python/Wycena
 Klient: Klient
 Źródła cen: materials prices.xlsx, cutting prices.xlsx

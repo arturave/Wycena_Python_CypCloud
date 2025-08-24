@@ -5,7 +5,7 @@
 wycena.py - Główny skrypt GUI do analizy plików XLSX i generowania raportów kosztów.
 
 Instrukcje użycia:
-1. Uruchom skrypt w środowisku Python 3 z zainstalowanymi bibliotekami: tkinter, openpyxl, docx, Pillow.
+1. Uruchom skrypt w środowisku Python 3 z zainstalowanymi bibliotekami: tkinter, openpyxl, docx, Pillow, requests.
 2. Wybierz folder z plikami XLSX.
 3. Analizuj XLSX, aby wypełnić tabelę.
 4. Edytuj wartości w tabeli jeśli potrzeba (ilość, laser, gięcie, dodatkowe).
@@ -33,6 +33,7 @@ from docx.oxml import OxmlElement
 import io
 from PIL import Image, ImageTk
 import locale
+import requests
 
 try:
     locale.setlocale(locale.LC_ALL, 'pl_PL.UTF-8')
@@ -96,7 +97,6 @@ last_total_cost = 0.0
 last_folder_path = ""
 total_sheets = 0
 total_parts_qty = 0
-total_row_iid = None  # To store the IID of the total row
 
 # ---- GUI ----
 root = tk.Tk()
@@ -152,6 +152,7 @@ ttk.Label(left_frame, text="Nazwa klienta:").grid(row=1, column=0, sticky="e")
 ttk.Entry(left_frame, textvariable=customer_var).grid(row=1, column=1)
 ttk.Label(left_frame, text="Numer oferty:").grid(row=2, column=0, sticky="e")
 ttk.Entry(left_frame, textvariable=offer_var).grid(row=2, column=1)
+ttk.Button(left_frame, text="Pobierz numer", command=lambda: offer_var.set(get_next_offer_number())).grid(row=2, column=2)
 ttk.Label(left_frame, text="Data oferty:").grid(row=3, column=0, sticky="e")
 ttk.Entry(left_frame, textvariable=date_var).grid(row=3, column=1)
 ttk.Label(left_frame, text="Okres ważności:").grid(row=4, column=0, sticky="e")
@@ -187,7 +188,7 @@ ttk.Label(left_frame, text="").grid(row=8, column=0, pady=10)
 ttk.Label(left_frame, text="Tekst kończący:").grid(row=9, column=0, sticky="ne")
 finishing_text_var = tk.Text(left_frame, height=10, width=50, bg="#3c3c3c", fg="white", insertbackground="white")
 finishing_text_var.grid(row=9, column=1)
-finishing_text_var.insert(tk.INSERT, "Wyłączenia odpowiedzialności ...")
+finishing_text_var.insert(tk.INSERT, "Wyłączenia odpowiedzialności \r\nDokumentacja techniczna\r\nRealizacja zamówienia odbywa się wyłącznie na podstawie dokumentacji technicznej dostarczonej przez Klienta. Odpowiedzialność za jej kompletność, poprawność oraz zgodność z założeniami projektowymi leży wyłącznie po stronie Zleceniodawcy. Wszelkie błędy, niejasności, czy niezgodności w przesłanych plikach uniemożliwiające prawidłowe wykonanie wyrobu, nie mogą stanowić podstawy do roszczeń wobec naszej firmy.\r\n\r\nMateriał powierzone i dostarczany przez Klienta\r\nNie ponosimy odpowiedzialności za uszkodzenia, błędy obróbki, zmiany struktury, odkształcenia ani inne wady powstałe w wyniku specyficznych właściwości materiału powierzonego przez Klienta, jego niejednorodności, błędnej deklaracji gatunku, braku wymaganych atestów czy oznaczeń partii. Klient zobowiązany jest dostarczyć materiał zgodny ze specyfikacją oraz wolny od wad fizycznych i chemicznych, mogących negatywnie wpływać na proces cięcia i jakość finalnego wyrobu.\r\n\r\nDostawcy materiałów\r\nNasza firma dołoży wszelkich starań w zakresie selekcji i zakupów materiałów wyłącznie od sprawdzonych dostawców. Zastrzegamy sobie jednak, że odpowiedzialność za parametry, właściwości lub wady ukryte materiału ogranicza się wyłącznie do zakresu wynikającego z dokumentacji danego producenta lub certyfikatu jakości – zgodnie z obowiązującym prawem oraz praktyką rynku stalowego.\r\n\r\nOgraniczenie odpowiedzialności prawnej\r\nOdpowiadamy wyłącznie za zgodność wykonanych prac z przesłaną dokumentacją oraz z obowiązującymi normami i przepisami prawa. Nie ponosimy odpowiedzialności za ewentualne szkody pośrednie, utracone korzyści, koszty produkcji, opóźnienia wynikające z przerw w dostawie materiałów, siły wyższej, zdarzeń losowych czy skutków niezastosowania się Klienta do obowiązujących przepisów i wymogów technicznych.\r\n\r\nPrzepisy prawa i gwarancje\r\nWszelkie realizacje podlegają przepisom prawa polskiego, normom branżowym oraz ustaleniom indywidualnym zawartym w zamówieniu. Ewentualna odpowiedzialność spółki ogranicza się do wartości usługi, a w szczególnych wypadkach – do ponownego wykonania usługi lub zwrotu jej kosztu. Nie udzielamy gwarancji na materiały powierzone, a zakres gwarancji na produkty wykonane z własnych materiałów jest określony indywidualnie w ofercie i na fakturze.\r\n\r\nMamy nadzieję, że powyższe wyjaśnienia pozwolą na jasne i czytelne określenie zasad współpracy oraz przyczynią się do pomyślnej realizacji Państwa zamówienia. Zapraszamy do zapoznania się ze szczegółami przygotowanej oferty oraz kontaktu w przypadku pytań lub wątpliwości.\r\n\r\nZ wyrazami szacunku,\r\nLaserTeam")
 
 ttk.Label(left_frame, text="Odczytane pliki:").grid(row=10, column=0, sticky="ne")
 file_list = tk.Listbox(left_frame, height=5, width=50, bg="#3c3c3c", fg="white")
@@ -860,9 +861,6 @@ def analyze_xlsx_folder():
     messagebox.showinfo("Analiza", "Analiza plików XLSX zakończona. Dane w Panelu 1 uzupełnione.")
 
 def update_total():
-    global total_row_iid
-    if not total_row_iid:
-        return
     total = 0.0
     for item in tree.get_children():
         if item == total_row_iid:
@@ -873,7 +871,20 @@ def update_total():
         bending = _parse_float(vals[7]) or 0
         additional = _parse_float(vals[8]) or 0
         total += (cost + bending + additional) * qty
-    tree.set(total_row_iid, column="7", value=format_pln(total))
+    tree.set(total_row_iid, column="6", value=format_pln(total))
+
+def get_next_offer_number():
+    month_year = datetime.datetime.now().strftime("%m/%Y")
+    month_key = datetime.datetime.now().strftime("counter_%Y-%m")
+    try:
+        response = requests.get(f"https://abacus.jasoncameron.dev/hit/xai_offers/{month_key}")
+        if response.status_code == 200:
+            counter_value = int(response.json()['value'])
+            return f"Laser/{counter_value:04d}/{month_year}"
+        else:
+            return "Laser/0001/08/2025"  # Fallback
+    except Exception:
+        return "Laser/0001/08/2025"  # Fallback
 
 # raport
 def generate_report():
@@ -885,7 +896,10 @@ def generate_report():
         messagebox.showerror("Błąd", "Nieprawidłowy folder docelowy.")
         return
     customer_name = customer_var.get().strip() or "Klient"
-    offer_number = offer_var.get().strip() or "0001"
+    offer_number = offer_var.get().strip()
+    if not offer_number:
+        offer_number = get_next_offer_number()
+        offer_var.set(offer_number)
     offer_date = date_var.get().strip() or datetime.datetime.now().strftime("%Y-%m-%d")
     validity = validity_var.get().strip() or (datetime.datetime.now() + timedelta(days=14)).strftime("%Y-%m-%d")
     logo_path = logo_var.get().strip()
@@ -923,12 +937,10 @@ def generate_report():
 
     # Generate DOCX
     doc = Document()
-    # Set margins
     sections = doc.sections
     for section in sections:
         section.left_margin = Cm(1)
         section.right_margin = Cm(1)
-
     if logo_path and os.path.exists(logo_path):
         try:
             doc.add_picture(logo_path, width=Inches(3.0))
@@ -1030,6 +1042,7 @@ def generate_report():
             r.font.size = Pt(9)
 
     current_date = datetime.datetime.now().strftime("%Y%m%d")
+    offer_number = offer_number.replace('/', '-')
     fname = f"Oferta_{sanitize_filename(customer_name) or 'Klient'}_{current_date}_{offer_number}.docx"
     full = os.path.join(raporty_path, fname)
     try:
