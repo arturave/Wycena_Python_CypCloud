@@ -1,42 +1,9 @@
-Log obliczeń - 2025-08-24 21:44:20.631224
-Folder: C:/Users/artur/source/repos/Wycena_Python/Wycena
+Log obliczeń - 2025-08-25 14:52:19.757746
+Folder: C:/Users/artur/source/repos/arturave/Wycena_Python_CypCloud/Wycena
 Klient: Klient
 Źródła cen: materials prices.xlsx, cutting prices.xlsx
 
 Szczegóły obliczeń:
-Rew001_SO-B32-001_SRODEK_I_2500: Jednostkowy (bez narzutów) 34.91, Gięcie 0.0, Dodatkowe 0.0, Całkowity 1675.6799999999998
-Rew001_SO-036-002_KANAL_SCIANA_OKNO_ZASLEPKA: Jednostkowy (bez narzutów) 6.57, Gięcie 0.0, Dodatkowe 0.0, Całkowity 315.36
-Rew001_SO-G68-001_FIBER_DNO_2520: Jednostkowy (bez narzutów) 146.25, Gięcie 0.0, Dodatkowe 0.0, Całkowity 1755.0
-Rew001_SO-H16-001_FIBER_BOK_Z_OKNAMI_2000_PALETA: Jednostkowy (bez narzutów) 51.46, Gięcie 0.0, Dodatkowe 0.0, Całkowity 617.52
-Rew003_SO-031-001_BOK_OKNO_ZASLEPKA: Jednostkowy (bez narzutów) 12.61, Gięcie 0.0, Dodatkowe 0.0, Całkowity 605.28
-Rew001_SO-G95-001_FIBER_GRZEBIEN_PAL_2520: Jednostkowy (bez narzutów) 83.0, Gięcie 0.0, Dodatkowe 0.0, Całkowity 2988.0
-Rew001_SO-G81-001_FIBER_PAL_RAMA_POZYCJONER_Y_II: Jednostkowy (bez narzutów) 5.73, Gięcie 0.0, Dodatkowe 0.0, Całkowity 137.52
-Rew001_SO-G72-001_FIBER_PAL_RAMA_GRZEB_BOK: Jednostkowy (bez narzutów) 247.63, Gięcie 0.0, Dodatkowe 0.0, Całkowity 2971.56
-Rew001_SO-G77-001_FIBER_PAL_NOGA_SRODKOWA: Jednostkowy (bez narzutów) 8.86, Gięcie 0.0, Dodatkowe 0.0, Całkowity 106.32
-Rew001_SO-G75-002_FIBER_PAL_RAMA_POZ_Y_HAK: Jednostkowy (bez narzutów) 11.89, Gięcie 0.0, Dodatkowe 0.0, Całkowity 285.36
-Rew004_SO-539-002_KANAL_PALETA: Jednostkowy (bez narzutów) 176.01, Gięcie 0.0, Dodatkowe 0.0, Całkowity 4224.24
-Rew001_SO-G69-001_FIBER_WANNA_2520: Jednostkowy (bez narzutów) 291.1, Gięcie 0.0, Dodatkowe 0.0, Całkowity 6986.400000000001
-Rew001_SO-G76-001_FIBER_PAL_2520_ZAMK_CZOL: Jednostkowy (bez narzutów) 60.56, Gięcie 0.0, Dodatkowe 0.0, Całkowity 121.12
-Rew002_SO-413-001_MOCOWANIE_SILOWNIKA: Jednostkowy (bez narzutów) 5.21, Gięcie 0.0, Dodatkowe 0.0, Całkowity 250.07999999999998
-Rew001_SO-H09-001_FIBER_PAL_OSL_GRZEB_BOK: Jednostkowy (bez narzutów) 51.91, Gięcie 0.0, Dodatkowe 0.0, Całkowity 622.92
-Rew001_SO-H07-001_FIBER_PAL_DOSZCZ_GORNE: Jednostkowy (bez narzutów) 17.78, Gięcie 0.0, Dodatkowe 0.0, Całkowity 426.72
-Rew001_SO-G93-001_FIBER_MOC_DASZKA_SRODEK_PAL: Jednostkowy (bez narzutów) 5.1, Gięcie 0.0, Dodatkowe 0.0, Całkowity 734.4
-Rew001_SO-H15-001_FIBER_PAL_2520_DNO_WANNY_5: Jednostkowy (bez narzutów) 44.9, Gięcie 0.0, Dodatkowe 0.0, Całkowity 2155.2
-Rew001_SO-H04-001_FIBER_PAL_MOC_DASZKA_BOK_GNIAZDO: Jednostkowy (bez narzutów) 3.36, Gięcie 0.0, Dodatkowe 0.0, Całkowity 322.56
-Rew001_SO-G88-001_FIBER_RUSZT_PAL_2520_ZAMAWIAC_POLOWE: Jednostkowy (bez narzutów) 47.28, Gięcie 0.0, Dodatkowe 0.0, Całkowity 7943.04
-Rew001_SO-274-002_PROWADNICA_WIDEL_DLUGA: Jednostkowy (bez narzutów) 47.64, Gięcie 0.0, Dodatkowe 0.0, Całkowity 1143.3600000000001
-Rew001_SO-H02-001_FIBER_PAL_MOC_DASZKA_BOK_HAK: Jednostkowy (bez narzutów) 4.3, Gięcie 0.0, Dodatkowe 0.0, Całkowity 412.79999999999995
-Rew001_SO-F18-001_WZM_NOGI: Jednostkowy (bez narzutów) 4.93, Gięcie 0.0, Dodatkowe 0.0, Całkowity 118.32
-Rew001_SO-G82-001_FIBER_PAL_ZASLEPKA_WZM_BOKU: Jednostkowy (bez narzutów) 6.15, Gięcie 0.0, Dodatkowe 0.0, Całkowity 147.60000000000002
-Rew001_SO-G97-001_FIBER_PAL_BAZA_MOC_GRZEB_BOK: Jednostkowy (bez narzutów) 3.63, Gięcie 0.0, Dodatkowe 0.0, Całkowity 130.68
-Rew001_SO-H04-001_FIBER_PAL_2520_DASZEK_BOK_619: Jednostkowy (bez narzutów) 39.79, Gięcie 0.0, Dodatkowe 0.0, Całkowity 954.96
-Rew001_SO-H14-001_FIBER_DASZEK_TRAPEZ_PAL: Jednostkowy (bez narzutów) 41.2, Gięcie 0.0, Dodatkowe 0.0, Całkowity 1977.6000000000001
-Rew001_SO-H08-001_FIBER_PAL_WANNA_WZMOC: Jednostkowy (bez narzutów) 9.76, Gięcie 0.0, Dodatkowe 0.0, Całkowity 702.72
-Rew001_SO-G98-001_FIBER_PAL_BAZA_POZ_Y: Jednostkowy (bez narzutów) 3.42, Gięcie 0.0, Dodatkowe 0.0, Całkowity 41.04
-Rew001_SO-G99-001_FIBER_PAL_2520_DASZEK_619: Jednostkowy (bez narzutów) 66.18, Gięcie 0.0, Dodatkowe 0.0, Całkowity 2382.4800000000005
-Rew001_SO-H03-001_FIBER_PAL_2520_DASZEK_BOK_L_P: Jednostkowy (bez narzutów) 39.84, Gięcie 0.0, Dodatkowe 0.0, Całkowity 956.1600000000001
-Rew001_SO-H05-001_PAL_2520FIB_DASZEK_650: Jednostkowy (bez narzutów) 65.49, Gięcie 0.0, Dodatkowe 0.0, Całkowity 2357.64
-Rew001_SO-G94-001_FIBER_PAL_BAZA_MOC_GRZEB: Jednostkowy (bez narzutów) 4.25, Gięcie 0.0, Dodatkowe 0.0, Całkowity 229.5
 Rew001_SO-B32-001_SRODEK_I_2500: Jednostkowy (z narzutami) 36.9, Gięcie 0.0, Dodatkowe 0.0, Całkowity 1771.1999999999998
 Rew001_SO-036-002_KANAL_SCIANA_OKNO_ZASLEPKA: Jednostkowy (z narzutami) 6.74, Gięcie 0.0, Dodatkowe 0.0, Całkowity 323.52
 Rew001_SO-G68-001_FIBER_DNO_2520: Jednostkowy (z narzutami) 155.29, Gięcie 0.0, Dodatkowe 0.0, Całkowity 1863.48

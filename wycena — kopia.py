@@ -1,32 +1,47 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 
+"""
+wycena.py - Główny skrypt GUI do analizy plików XLSX i generowania raportów kosztów.
+
+Instrukcje użycia:
+1. Uruchom skrypt w środowisku Python 3 z zainstalowanymi bibliotekami: tkinter, openpyxl, docx, Pillow, requests.
+2. Wybierz folder z plikami XLSX.
+3. Analizuj XLSX, aby wypełnić tabelę.
+4. Edytuj wartości w tabeli jeśli potrzeba (ilość, laser, gięcie, dodatkowe).
+5. Kliknij "Generuj raport", aby stworzyć ofertę DOCX, raporty XLSX i log.
+
+Skrypt jest zoptymalizowany pod kątem czytelności i wydajności, z pełną dokumentacją.
+"""
+
 import os
 import sys
 import datetime
 from datetime import timedelta
 import re
+from tkinter import ttk
 import tkinter as tk
-from tkinter import filedialog, messagebox, ttk
+from tkinter import filedialog, messagebox
 from openpyxl import load_workbook
-# DOCX (raport)
+from openpyxl import Workbook
+from openpyxl.drawing.image import Image as OpenpyxlImage
 from docx import Document
 from docx.shared import Inches, RGBColor, Pt, Cm
 from docx.enum.text import WD_ALIGN_PARAGRAPH
 from docx.oxml.ns import qn
 from docx.oxml import OxmlElement
-import io  # Do konwersji obrazu na bajty, jeśli potrzeba do raportu
+import io
 from PIL import Image, ImageTk
-import subprocess
-
-# Locale do formatowania PLN
 import locale
+import requests
+
 try:
     locale.setlocale(locale.LC_ALL, 'pl_PL.UTF-8')
 except Exception:
     pass
 
 def format_pln(value):
+    """Formatuje wartość na PLN z przecinkiem i grupowaniem tysięcy."""
     try:
         s = locale.format_string('%.2f', float(value), grouping=True)
         return s.replace('.', ',')
@@ -37,14 +52,17 @@ def format_pln(value):
             return "0,00"
 
 def sanitize_filename(name):
+    """Sanitizuje nazwę pliku, zastępując niedozwolone znaki."""
     for ch in r'< > : " / \ | ? *':
         name = name.replace(ch, '_')
     return name
 
 def _norm_s(s):
+    """Normalizuje string do upper case, usuwa spacje."""
     return (str(s).strip().upper() if s is not None else "")
 
 def _parse_float(val):
+    """Parsuje wartość do float, obsługuje przecinki."""
     if val is None:
         return None
     if isinstance(val, (int, float)):
@@ -56,6 +74,7 @@ def _parse_float(val):
         return None
 
 def _map_gas_to_key(gas_raw: str) -> str:
+    """Mapuje nazwę gazu na klucz 'N' lub 'O'."""
     g = _norm_s(gas_raw)
     if g in {"NITROGEN", "AZOT", "氮气", "N"}:
         return "N"
@@ -70,6 +89,14 @@ CUTTING_FILE   = os.path.join(SCRIPT_DIR, "cutting prices.xlsx")
 material_prices = {}  # (MAT, THK)-> PLN/kg
 cutting_prices  = {}  # (THK, MAT, GAS)-> PLN/m
 _mat_set, _thk_set, _gas_set = set(), set(), set()
+
+# Global variables for shared data
+all_parts = []
+last_groups = []
+last_total_cost = 0.0
+last_folder_path = ""
+total_sheets = 0
+total_parts_qty = 0
 
 # ---- GUI ----
 root = tk.Tk()
@@ -125,6 +152,7 @@ ttk.Label(left_frame, text="Nazwa klienta:").grid(row=1, column=0, sticky="e")
 ttk.Entry(left_frame, textvariable=customer_var).grid(row=1, column=1)
 ttk.Label(left_frame, text="Numer oferty:").grid(row=2, column=0, sticky="e")
 ttk.Entry(left_frame, textvariable=offer_var).grid(row=2, column=1)
+ttk.Button(left_frame, text="Pobierz numer", command=lambda: offer_var.set(get_next_offer_number())).grid(row=2, column=2)
 ttk.Label(left_frame, text="Data oferty:").grid(row=3, column=0, sticky="e")
 ttk.Entry(left_frame, textvariable=date_var).grid(row=3, column=1)
 ttk.Label(left_frame, text="Okres ważności:").grid(row=4, column=0, sticky="e")
@@ -160,7 +188,7 @@ ttk.Label(left_frame, text="").grid(row=8, column=0, pady=10)
 ttk.Label(left_frame, text="Tekst kończący:").grid(row=9, column=0, sticky="ne")
 finishing_text_var = tk.Text(left_frame, height=10, width=50, bg="#3c3c3c", fg="white", insertbackground="white")
 finishing_text_var.grid(row=9, column=1)
-finishing_text_var.insert(tk.INSERT, "Wyłączenia odpowiedzialności ...")
+finishing_text_var.insert(tk.INSERT, "Wyłączenia odpowiedzialności \r\nDokumentacja techniczna\r\nRealizacja zamówienia odbywa się wyłącznie na podstawie dokumentacji technicznej dostarczonej przez Klienta. Odpowiedzialność za jej kompletność, poprawność oraz zgodność z założeniami projektowymi leży wyłącznie po stronie Zleceniodawcy. Wszelkie błędy, niejasności, czy niezgodności w przesłanych plikach uniemożliwiające prawidłowe wykonanie wyrobu, nie mogą stanowić podstawy do roszczeń wobec naszej firmy.\r\n\r\nMateriał powierzone i dostarczany przez Klienta\r\nNie ponosimy odpowiedzialności za uszkodzenia, błędy obróbki, zmiany struktury, odkształcenia ani inne wady powstałe w wyniku specyficznych właściwości materiału powierzonego przez Klienta, jego niejednorodności, błędnej deklaracji gatunku, braku wymaganych atestów czy oznaczeń partii. Klient zobowiązany jest dostarczyć materiał zgodny ze specyfikacją oraz wolny od wad fizycznych i chemicznych, mogących negatywnie wpływać na proces cięcia i jakość finalnego wyrobu.\r\n\r\nDostawcy materiałów\r\nNasza firma dołoży wszelkich starań w zakresie selekcji i zakupów materiałów wyłącznie od sprawdzonych dostawców. Zastrzegamy sobie jednak, że odpowiedzialność za parametry, właściwości lub wady ukryte materiału ogranicza się wyłącznie do zakresu wynikającego z dokumentacji danego producenta lub certyfikatu jakości – zgodnie z obowiązującym prawem oraz praktyką rynku stalowego.\r\n\r\nOgraniczenie odpowiedzialności prawnej\r\nOdpowiadamy wyłącznie za zgodność wykonanych prac z przesłaną dokumentacją oraz z obowiązującymi normami i przepisami prawa. Nie ponosimy odpowiedzialności za ewentualne szkody pośrednie, utracone korzyści, koszty produkcji, opóźnienia wynikające z przerw w dostawie materiałów, siły wyższej, zdarzeń losowych czy skutków niezastosowania się Klienta do obowiązujących przepisów i wymogów technicznych.\r\n\r\nPrzepisy prawa i gwarancje\r\nWszelkie realizacje podlegają przepisom prawa polskiego, normom branżowym oraz ustaleniom indywidualnym zawartym w zamówieniu. Ewentualna odpowiedzialność spółki ogranicza się do wartości usługi, a w szczególnych wypadkach – do ponownego wykonania usługi lub zwrotu jej kosztu. Nie udzielamy gwarancji na materiały powierzone, a zakres gwarancji na produkty wykonane z własnych materiałów jest określony indywidualnie w ofercie i na fakturze.\r\n\r\nMamy nadzieję, że powyższe wyjaśnienia pozwolą na jasne i czytelne określenie zasad współpracy oraz przyczynią się do pomyślnej realizacji Państwa zamówienia. Zapraszamy do zapoznania się ze szczegółami przygotowanej oferty oraz kontaktu w przypadku pytań lub wątpliwości.\r\n\r\nZ wyrazami szacunku,\r\nLaserTeam")
 
 ttk.Label(left_frame, text="Odczytane pliki:").grid(row=10, column=0, sticky="ne")
 file_list = tk.Listbox(left_frame, height=5, width=50, bg="#3c3c3c", fg="white")
@@ -191,7 +219,7 @@ panel_a = tk.PanedWindow(right_paned, orient=tk.VERTICAL, bg="#2c2c2c", sashreli
 
 # --- PANEL 1 ---
 subpanel1 = tk.LabelFrame(panel_a, text="PANEL 1 — PODGLĄD", bg="#2c2c2c", fg="white")
-columns = ("1", "2", "3", "4", "5", "6", "7", "8", "9")
+columns = ("1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11")
 tree = ttk.Treeview(subpanel1, columns=columns, show="tree headings")
 tree.column("#0", width=150, minwidth=100, stretch=tk.NO)  # Increased width for better thumbnail visibility
 tree.heading("1", text="Nr");     tree.column("1", minwidth=50,  width=50,  stretch=tk.NO)
@@ -203,6 +231,8 @@ tree.heading("6", text="Ilość");    tree.column("6", minwidth=50, width=80, st
 tree.heading("7", text="Laser");    tree.column("7", minwidth=50, width=100, stretch=tk.NO, anchor="e")
 tree.heading("8", text="Gięcie/szt."); tree.column("8", minwidth=50, width=100, stretch=tk.NO, anchor="e")
 tree.heading("9", text="Dodatkowe/szt."); tree.column("9", minwidth=50, width=120, stretch=tk.NO, anchor="e")
+tree.heading("10", text="Waga"); tree.column("10", minwidth=50, width=80, stretch=tk.NO, anchor="e")
+tree.heading("11", text="Długość cięcia"); tree.column("11", minwidth=50, width=120, stretch=tk.NO, anchor="e")
 
 # Add scrollbar for treeview
 scrollbar = ttk.Scrollbar(subpanel1, orient="vertical", command=tree.yview)
@@ -227,6 +257,7 @@ def edit_cell(event):
             vals[col_index] = e.get()
             tree.item(item, values=vals)
             e.destroy()
+            update_total()  # Recalculate total after edit
         e.bind("<Return>", save_edit); e.bind("<FocusOut>", save_edit)
 
 tree.bind("<Double-1>", edit_cell)
@@ -234,12 +265,12 @@ panel_a.add(subpanel1, minsize=220)
 
 # --- PANEL 2 ---
 subpanel2 = tk.LabelFrame(panel_a, text="PANEL 2 — STAŁE KOSZTY", bg="#2c2c2c", fg="white")
-ttk.Label(subpanel2, text="Koszty operacyjne za arkusz:").grid(row=0, column=0, sticky="w", padx=5, pady=5)
-op_cost_entry = ttk.Entry(subpanel2); op_cost_entry.grid(row=0, column=1, padx=5, pady=5); op_cost_entry.insert(tk.INSERT, "40,00")
-ttk.Label(subpanel2, text="Technologia za zlecenie:").grid(row=1, column=0, sticky="w", padx=5, pady=5)
-tech_order_entry = ttk.Entry(subpanel2); tech_order_entry.grid(row=1, column=1, padx=5, pady=5); tech_order_entry.insert(tk.INSERT, "50,00")
-ttk.Label(subpanel2, text="Dodatkowe koszty dla zlecenia (np. narzędzia):").grid(row=2, column=0, sticky="w", padx=5, pady=5)
-add_order_cost_entry = ttk.Entry(subpanel2); add_order_cost_entry.grid(row=2, column=1, padx=5, pady=5); add_order_cost_entry.insert(tk.INSERT, "0,00")
+ttk.Label(subpanel2, text="Koszty operacyjne za arkusz:").grid(row=0, column=0, sticky="w")
+op_cost_entry = ttk.Entry(subpanel2); op_cost_entry.grid(row=0, column=1); op_cost_entry.insert(tk.INSERT, "40,00")
+ttk.Label(subpanel2, text="Technologia za zlecenie:").grid(row=1, column=0, sticky="w")
+tech_order_entry = ttk.Entry(subpanel2); tech_order_entry.grid(row=1, column=1); tech_order_entry.insert(tk.INSERT, "50,00")
+ttk.Label(subpanel2, text="Dodatkowe koszty dla zlecenia (np. narzędzi):").grid(row=2, column=0, sticky="w")
+add_order_cost_entry = ttk.Entry(subpanel2); add_order_cost_entry.grid(row=2, column=1); add_order_cost_entry.insert(tk.INSERT, "0,00")
 subpanel2.update_idletasks()
 panel2_height = subpanel2.winfo_reqheight() + 20  # Dodatkowe miejsce na marginesy
 panel_a.add(subpanel2, height=panel2_height, minsize=panel2_height)
@@ -554,14 +585,14 @@ def apply_dynamic_pricing(price_per_kg: float, rate_per_m: float, thickness_mm: 
     return mat_adj, rate_adj, dbg
 
 # Referencje do PhotoImage, żeby obrazy nie znikały (GC)
-tree_img_refs = []
 thumbnail_imgs = []
 
 def analyze_xlsx_folder():
+    global all_parts, last_groups, last_total_cost, last_folder_path, total_sheets, total_parts_qty, total_row_iid
     for item in tree.get_children():
         tree.delete(item)
     thumbnail_imgs.clear()
-    global last_groups, last_total_cost, last_folder_path
+    all_parts = []
     folder_path = folder_var.get()
     if not folder_path:
         messagebox.showerror("Błąd", "Proszę wybrać folder."); return
@@ -574,97 +605,100 @@ def analyze_xlsx_folder():
     if not _ensure_cenniki_loaded():
         messagebox.showwarning("Uwaga", "Cenniki niezaładowane — użyję 0.00, sprawdź Panel 3.")
 
-    # wyczyść tabelę
-    for item in tree.get_children(): tree.delete(item)
+    global op_cost_per_sheet, tech_per_order, add_costs_order
+    op_cost_per_sheet = _parse_float(op_cost_entry.get()) or 0.0
+    tech_per_order = _parse_float(tech_order_entry.get()) or 0.0
+    add_costs_order = _parse_float(add_order_cost_entry.get()) or 0.0
 
-    # stałe koszty
-    def to_float(s):
-        try: return float(str(s).replace(",", "."))
-        except Exception: return 0.0
-    op_cost_per_sheet = to_float(op_cost_entry.get() or "0")
-    tech_per_order     = to_float(tech_order_entry.get() or "0")
-    add_costs_order    = to_float(add_order_cost_entry.get() or "0")
-    total_extra = tech_per_order + add_costs_order
+    total_sheets = 0
+    total_parts_qty = 0
+    groups = []
+    subnr = 0
 
-    total_sheets = 0; total_parts_qty = 0
-    groups = []; all_parts = []; subnr = 0 
+    thumbnails = {}  # To store raw image data for each file if needed
 
     for fname in files:
         path = os.path.join(folder_path, fname)
         try:
             wb = load_workbook(path, data_only=True)
-            if "All Task List" not in wb.sheetnames: raise KeyError("Brak arkusza 'All Task List'")
-            # pobieranie obrazu z arkusza 'All Parts List'            
+            if "All Task List" not in wb.sheetnames:
+                raise KeyError("Brak arkusza 'All Task List'")
             all_task = wb["All Task List"]
             all_part_list = wb["All Parts List"]
-            thumbnails = {}
+            file_thumbnails = {}
             for img in all_part_list._images:
                 row = img.anchor._from.row + 1
                 col = img.anchor._from.col + 1
                 if col == 2:  # Column B
                     img_data = img._data()
-                    thumbnails[row] = img_data
-            # Czas cięcia (All Task List!F4) → na '0,00h'
+                    file_thumbnails[row] = img_data
             cut_time = parse_duration_to_hours(all_task['F4'].value)
-            total_cut_length = get_total_cut_length(all_task,"Total")
-            material_name = all_task["B4"].value; thickness_raw = all_task["C4"].value; gas_raw = all_task["E4"].value
-            mat_norm = _norm_s(material_name); thk_val = _parse_float(thickness_raw); gas_key = _map_gas_to_key(gas_raw)
-            if not mat_norm: raise ValueError("All Task List!B4 (Material) — brak wartości")
-            if thk_val is None: raise ValueError("All Task List!C4 (Thickness(mm)) — brak liczby")
-            if not gas_key: raise ValueError("All Task List!E4 (Gas) — nieobsługiwany typ gazu")
+            total_cut_length = get_total_cut_length(all_task, "Total")
+            material_name = all_task["B4"].value
+            thickness_raw = all_task["C4"].value
+            gas_raw = all_task["E4"].value
+            mat_norm = _norm_s(material_name)
+            thk_val = _parse_float(thickness_raw)
+            gas_key = _map_gas_to_key(gas_raw)
+            if not mat_norm:
+                raise ValueError("All Task List!B4 (Material) — brak wartości")
+            if thk_val is None:
+                raise ValueError("All Task List!C4 (Thickness(mm)) — brak liczby")
+            if not gas_key:
+                raise ValueError("All Task List!E4 (Gas) — nieobsługiwany typ gazu")
 
-            price_per_kg = material_prices.get((mat_norm, thk_val), 0.0)
-            rate_per_cut_length = cutting_prices.get((thk_val, mat_norm, gas_key), 0.0)
+            base_price_per_kg = material_prices.get((mat_norm, thk_val), 0.0)
+            base_rate_per_cut_length = cutting_prices.get((thk_val, mat_norm, gas_key), 0.0)
 
-            if "Cost List" not in wb.sheetnames: raise KeyError("Brak arkusza 'Cost List'")
+            price_per_kg, rate_per_cut_length, _dpdbg = apply_dynamic_pricing(
+                base_price_per_kg, base_rate_per_cut_length, thk_val, total_cut_length, cut_time
+            )
+
+            if "Cost List" not in wb.sheetnames:
+                raise KeyError("Brak arkusza 'Cost List'")
             cost_sheet = wb["Cost List"]
 
-            # Average utilization → szukamy tekstu, wartość w kol. K
             util_row = None
             for r in range(1, cost_sheet.max_row + 1):
                 for c in range(1, cost_sheet.max_column + 1):
                     v = cost_sheet.cell(row=r, column=c).value
                     if v and "Average utilization:" in str(v):
-                        util_row = r; break
-                if util_row: break
-            if util_row is None: raise ValueError("Nie znaleziono 'Average utilization:'")
+                        util_row = r
+                        break
+                if util_row:
+                    break
+            if util_row is None:
+                raise ValueError("Nie znaleziono 'Average utilization:'")
             util_str = cost_sheet.cell(row=util_row, column=11).value
-            util_val = _parse_float(str(util_str).replace("%","")) if util_str is not None else None
-            utilization_rate = (util_val/100.0) if (util_val is not None) else 0.0
+            util_val = _parse_float(str(util_str).replace("%", "")) if util_str is not None else None
+            utilization_rate = (util_val / 100.0) if (util_val is not None) else 0.0
             if utilization_rate <= 0 or utilization_rate > 1:
                 messagebox.showwarning("Uwaga", f"Average utilization poza zakresem ({utilization_rate}).")
 
-            # 'Material Price' w kol. A -> stawki kontur/marking/defilm
             mat_price_row = None
             for r in range(1, cost_sheet.max_row + 1):
                 v = cost_sheet.cell(row=r, column=1).value
-                if v and "Material Price" in str(v): mat_price_row = r; break
-            if mat_price_row is None: raise ValueError("Brak wiersza 'Material Price'")
+                if v and "Material Price" in str(v):
+                    mat_price_row = r
+                    break
+            if mat_price_row is None:
+                raise ValueError("Brak wiersza 'Material Price'")
 
             def parse_num(cellv):
-                if cellv is None: return 0.0
-                s = str(cellv).strip(); s = ''.join(ch for ch in s.split()[0] if ch.isdigit() or ch in ('.',',')); s = s.replace(",", ".")
-                try: return float(s or "0.0")
-                except Exception: return 0.0
+                if cellv is None:
+                    return 0.0
+                s = str(cellv).strip()
+                s = ''.join(ch for ch in s.split()[0] if ch.isdigit() or ch in ('.', ','))
+                s = s.replace(",", ".")
+                try:
+                    return float(s or "0.0")
+                except Exception:
+                    return 0.0
 
-            rate_per_contour        = parse_num(cost_sheet.cell(row=mat_price_row, column=7).value)   # G
-            rate_per_marking_length = parse_num(cost_sheet.cell(row=mat_price_row, column=9).value)   # I
-            rate_per_defilm_length  = parse_num(cost_sheet.cell(row=mat_price_row, column=10).value)  # J
+            rate_per_contour = parse_num(cost_sheet.cell(row=mat_price_row, column=7).value)  # G
+            rate_per_marking_length = parse_num(cost_sheet.cell(row=mat_price_row, column=9).value)  # I
+            rate_per_defilm_length = parse_num(cost_sheet.cell(row=mat_price_row, column=10).value)  # J
 
-
-            # Dynamic pricing: +7% min. na materiale oraz boost zależny od czasu/ długości
-            #• Dla bardzo krótkich zleceń (np. ≤ 1 min @ 1 mm lub ≤ 5 min @ 15 mm) — materiał i stawka cięcia ×3.5.
-            #• Dla długich zleceń (≥ 45 min @ 1 mm, ≥ 90 min @ 15 mm) — cięcie bez zmian, materiał min. ×1.07.
-            #• Pośrednio — liniowa interpolacja między tymi wartościami.
-            #• Prędkości cięcia (m/min) interpolowane po podanych punktach (1, 1.5, 2, 3, 5, 6, 8, 10, 12, 15 mm).
-            
-            price_per_kg, rate_per_cut_length, _dpdbg = apply_dynamic_pricing(
-                price_per_kg, rate_per_cut_length, thk_val, total_cut_length, cut_time
-            )
-
-
-
-            # Suma arkuszy: "Cut number:" w kol. D (od wiersza 8) w All Task List
             r_idx = 8
             while all_task.cell(row=r_idx, column=4).value is not None:
                 v = all_task.cell(row=r_idx, column=4).value
@@ -672,40 +706,57 @@ def analyze_xlsx_folder():
                     total_sheets += int(v)
                 r_idx += 1
 
-            # Dane części — pierwszy numeryczny wiersz kol. A
             start_row = None
             for r in range(1, cost_sheet.max_row + 1):
                 a_val = cost_sheet.cell(row=r, column=1).value
                 if a_val and isinstance(a_val, (int, float)):
-                    start_row = r; break
-            if start_row is None: raise ValueError("Nie znaleziono wiersza startowego (kol. A — ID)")
+                    start_row = r
+                    break
+            if start_row is None:
+                raise ValueError("Nie znaleziono wiersza startowego (kol. A — ID)")
+            # rozdział overheadów na sztuki
+            if total_parts_qty > 0:
+                extra_per_part = (tech_per_order + add_costs_order) / total_parts_qty
+                op_cost_per_part = (total_sheets * op_cost_per_sheet) / total_parts_qty
+            else:
+                extra_per_part = 0.0
+                op_cost_per_part = 0.0
 
-            parts_for_group = []; subnr += 1; lp = 0; row = start_row
-            while row <= cost_sheet.max_row and isinstance(cost_sheet.cell(row=row, column=1).value, (int,float)):
+            parts_for_group = []
+            subnr += 1
+            lp = 0
+            row = start_row
+            while row <= cost_sheet.max_row and isinstance(cost_sheet.cell(row=row, column=1).value, (int, float)):
                 lp += 1
-                part_name      = cost_sheet.cell(row=row, column=2).value
-                part_qty       = cost_sheet.cell(row=row, column=5).value or 0
-                weight         = parse_num(cost_sheet.cell(row=row, column=6).value)
-                contours_qty   = parse_num(cost_sheet.cell(row=row, column=7).value)
-                cut_length     = parse_num(cost_sheet.cell(row=row, column=8).value)
+                part_name = cost_sheet.cell(row=row, column=2).value
+                part_qty = cost_sheet.cell(row=row, column=5).value or 0
+                weight = parse_num(cost_sheet.cell(row=row, column=6).value)
+                contours_qty = parse_num(cost_sheet.cell(row=row, column=7).value)
+                cut_length = parse_num(cost_sheet.cell(row=row, column=8).value)
                 marking_length = parse_num(cost_sheet.cell(row=row, column=9).value)
-                defilm_length  = parse_num(cost_sheet.cell(row=row, column=10).value)
+                defilm_length = parse_num(cost_sheet.cell(row=row, column=10).value)
 
-                adj_weight   = (weight / utilization_rate) if utilization_rate > 0 else weight
-                material_cost= adj_weight * price_per_kg
-                contours_cost= contours_qty * rate_per_contour
-                cut_cost     = cut_length * rate_per_cut_length
-                marking_cost = marking_length * rate_per_marking_length
-                defilm_cost  = defilm_length * rate_per_defilm_length
-                total_part   = material_cost + contours_cost + cut_cost + marking_cost + defilm_cost
+                adj_weight = (weight / utilization_rate) if utilization_rate > 0 else weight
 
-                # --- Pobierz thumbnail z arkusza All Parts List ---
-                thumbnail_photo = None
+                # Base costs
+                base_material_cost = adj_weight * base_price_per_kg
+                base_cut_cost = cut_length * base_rate_per_cut_length
+                base_total_part = base_material_cost + contours_qty * rate_per_contour + base_cut_cost + marking_length * rate_per_marking_length + defilm_length * rate_per_defilm_length
+
+                # Dynamic costs
+                material_cost = adj_weight * price_per_kg
+                cut_cost = cut_length * rate_per_cut_length
+                total_part = material_cost + contours_qty * rate_per_contour + cut_cost + marking_length * rate_per_marking_length + defilm_length * rate_per_defilm_length
+
+                thumbnail_data = None
                 all_parts_row = 2 + lp  # Assuming row 3 is first part
-                if all_parts_row in thumbnails:
-                    data = thumbnails[all_parts_row]
+                if all_parts_row in file_thumbnails:
+                    thumbnail_data = file_thumbnails[all_parts_row]
+
+                thumbnail_photo = None
+                if thumbnail_data:
                     try:
-                        pil_img = Image.open(io.BytesIO(data))
+                        pil_img = Image.open(io.BytesIO(thumbnail_data))
                         max_w, max_h = 140, 70
                         w, h = pil_img.size
                         ratio = min(max_w / w, max_h / h, 1.0)
@@ -718,19 +769,54 @@ def analyze_xlsx_folder():
                         pass
 
                 all_parts.append({
-                'id': lp,
-                'subnr': subnr,
-                'name': part_name,
-                'material': material_name,
-                'thickness': thk_val,
-                'qty': int(part_qty) if isinstance(part_qty,(int,float)) else 0,
-                'cost_per_unit': float(f"{total_part:.2f}"),
-                'thumb': thumbnail_photo, # <-- nowość
+                    'id': lp,
+                    'additional_per_unit': 0.0,
+                    'base_cost_per_unit': float(f"{base_total_part:.2f}"),
+                    'bending_per_unit': 0.0,
+                    'contours_qty': contours_qty,
+                    'cost_per_unit': float(f"{total_part:.2f}"),
+                    'cut_length': cut_length,
+                    'defilm_length': defilm_length,
+                    'marking_length': marking_length,
+                    'mat_norm' : mat_norm,
+                    'material': material_name,
+                    'material_name' : material_name,
+                    'name': part_name,
+                    'part_name' : part_name,
+                    'part_qty' : part_qty,
+                    'qty': int(part_qty) if isinstance(part_qty, (int, float)) else 0,
+                    'subnr': subnr,
+                    'thickness': thk_val,
+                    'thickness_raw' : thickness_raw,
+                    'thk_val' : thk_val,
+                    'utilization_rate' : utilization_rate,
+                    'weight' : weight,
+                    'extra_per_part' : extra_per_part,
+                    'op_cost_per_part' : op_cost_per_part,
+                # Base costs
+                    'base_cut_cost': base_cut_cost,
+                    'base_material_cost' : base_material_cost,
+                    'base_price_per_kg':base_price_per_kg,
+                    'base_rate_per_cut_length': base_rate_per_cut_length,
+                    'base_total_part' : base_total_part,
+                    'gas_key' : gas_key,
+                    'gas_raw' : gas_raw,
+                    'rate_per_contour': rate_per_contour,
+                    'rate_per_defilm_length' : rate_per_defilm_length,
+                    'rate_per_marking_length' : rate_per_marking_length,
+                    'raw_weight': weight,
+                # Dynamic costs
+                    'adj_weight': adj_weight,
+                    'cut_cost' : cut_cost,
+                    'material_cost' : material_cost,
+                    'total_part' : total_part,
+                # Graphics
+                    'thumb_data': thumbnail_data,  # Raw bytes
                 })
 
                 parts_for_group.append((part_name, float(f"{total_part:.2f}"),
-                                        int(part_qty) if isinstance(part_qty,(int,float)) else 0))
-                total_parts_qty += int(part_qty) if isinstance(part_qty,(int,float)) else 0
+                                        int(part_qty) if isinstance(part_qty, (int, float)) else 0))
+                total_parts_qty += int(part_qty) if isinstance(part_qty, (int, float)) else 0
                 row += 1
 
             groups.append((material_name, thk_val, parts_for_group))
@@ -739,17 +825,13 @@ def analyze_xlsx_folder():
             messagebox.showerror("Błąd", f"Błąd podczas przetwarzania pliku {fname}: {e}")
             return
 
-    # rozdział overheadów na sztuki
-    op_cost_total = total_sheets * op_cost_per_sheet
-    extra_total   = total_extra
-    if total_parts_qty > 0:
-        extra_per_part  = extra_total / total_parts_qty
-        op_cost_per_part= op_cost_total / total_parts_qty
-    else:
-        extra_per_part = op_cost_per_part = 0.0
+   
 
     for p in all_parts:
-        p['cost_per_unit'] = float(f"{(p['cost_per_unit'] + extra_per_part + op_cost_per_part):.2f}")
+        p['cost_per_unit'] += extra_per_part + op_cost_per_part
+        p['base_cost_per_unit'] += extra_per_part + op_cost_per_part
+        p['cost_per_unit'] = float(f"{p['cost_per_unit']:.2f}")
+        p['base_cost_per_unit'] = float(f"{p['base_cost_per_unit']:.2f}")
 
     # tabela
     for i, p in enumerate(all_parts, start=1):
@@ -761,99 +843,349 @@ def analyze_xlsx_folder():
             f"{p['thickness']}",
             p['qty'],
             format_pln(p['cost_per_unit']),
-            "",  # Gięcie/szt.
-            "",  # Dodatkowe/szt.
+            "",
+            "",
+            format_pln(p['adj_weight']),
+            format_pln(p['cut_length']),
         )
         opts = {'values': item_values}
-        thumb = p.get('thumb')
-        if thumb:  # only include when a PhotoImage is present
-            opts['image'] = thumb
+        if p['thumb_data']:
+            try:
+                pil_img = Image.open(io.BytesIO(p['thumb_data']))
+                max_w, max_h = 140, 70
+                w, h = pil_img.size
+                ratio = min(max_w / w, max_h / h, 1.0)
+                new_w = int(w * ratio)
+                new_h = int(h * ratio)
+                pil_img = pil_img.resize((new_w, new_h), Image.LANCZOS)
+                thumb = ImageTk.PhotoImage(pil_img)
+                thumbnail_imgs.append(thumb)
+                opts['image'] = thumb
+            except Exception:
+                pass
 
         tree.insert('', 'end', **opts)
 
-    total_sum = 0.0; merged_groups = []
+    # Add total row to treeview
+    total_order = sum(p['cost_per_unit'] * p['qty'] for p in all_parts)
+    total_row_iid = tree.insert('', 'end', values=('', '', 'Razem', '', '', '', format_pln(total_order), '', '', '', ''))
+
+    total_sum = 0.0
+    merged_groups = []
     for (mat_name, thk, parts) in groups:
         adj = []
         for (nm, cost, qty) in parts:
-            c = float(f"{(cost + extra_per_part + op_cost_per_part):.2f}")
-            adj.append((nm, c, qty)); total_sum += c * qty
+            c = float(f"{cost:.2f}")
+            adj.append((nm, c, qty))
+            total_sum += c * qty
         merged_groups.append((mat_name, thk, adj))
 
-    last_groups[:] = merged_groups
+    last_groups = merged_groups
     last_total_cost = total_sum
     last_folder_path = folder_path
     messagebox.showinfo("Analiza", "Analiza plików XLSX zakończona. Dane w Panelu 1 uzupełnione.")
 
+def update_total():
+    total = 0.0
+    for item in tree.get_children():
+        if item == total_row_iid:
+            continue
+        vals = tree.item(item, 'values')
+        qty = _parse_float(vals[5]) or 0
+        cost = _parse_float(vals[6]) or 0
+        bending = _parse_float(vals[7]) or 0
+        additional = _parse_float(vals[8]) or 0
+        total += (cost + bending + additional) * qty
+    tree.set(total_row_iid, column="6", value=format_pln(total))
+
+def get_next_offer_number():
+    month_year = datetime.datetime.now().strftime("%m/%Y")
+    month_key = datetime.datetime.now().strftime("counter_%Y-%m")
+    try:
+        response = requests.get(f"https://abacus.jasoncameron.dev/hit/xai_offers/{month_key}")
+        if response.status_code == 200:
+            counter_value = int(response.json()['value'])
+            return f"Laser/{counter_value:04d}/{month_year}"
+        else:
+            return "Laser/0001/08/2025"  # Fallback
+    except Exception:
+        return "Laser/0001/08/2025"  # Fallback
+
 # raport
 def generate_report():
-    if not last_groups:
-        messagebox.showerror("Błąd", "Brak danych do raportu. Najpierw 'Analizuj XLSX'."); return
-    folder_path = (folder_var.get().strip() or last_folder_path)
+    if not all_parts:
+        messagebox.showerror("Błąd", "Brak danych do raportu. Najpierw 'Analizuj XLSX'.")
+        return
+    folder_path = folder_var.get().strip() or last_folder_path
     if not folder_path or not os.path.isdir(folder_path):
-        messagebox.showerror("Błąd", "Nieprawidłowy folder docelowy."); return
+        messagebox.showerror("Błąd", "Nieprawidłowy folder docelowy.")
+        return
     customer_name = customer_var.get().strip() or "Klient"
-    offer_number  = offer_var.get().strip() or "0001"
-    offer_date    = date_var.get().strip() or datetime.datetime.now().strftime("%Y-%m-%d")
-    validity      = validity_var.get().strip() or (datetime.datetime.now() + timedelta(days=14)).strftime("%Y-%m-%d")
-    logo_path     = logo_var.get().strip()
+    offer_number = offer_var.get().strip()
+    if not offer_number:
+        offer_number = get_next_offer_number()
+        offer_var.set(offer_number)
+    offer_date = date_var.get().strip() or datetime.datetime.now().strftime("%Y-%m-%d")
+    validity = validity_var.get().strip() or (datetime.datetime.now() + timedelta(days=14)).strftime("%Y-%m-%d")
+    logo_path = logo_var.get().strip()
     contact_details = contact_text.get("1.0", tk.END).strip()
-    preceding_text  = preceding_text_var.get("1.0", tk.END).strip()
-    finishing_text  = finishing_text_var.get("1.0", tk.END).strip()
+    preceding_text = preceding_text_var.get("1.0", tk.END).strip()
+    finishing_text = finishing_text_var.get("1.0", tk.END).strip()
 
+    # Create Raporty folder
+    raporty_path = os.path.join(folder_path, "Raporty")
+    os.makedirs(raporty_path, exist_ok=True)
+
+    # Update all_parts from tree
+    tree_items = tree.get_children()
+    if len(tree_items) != len(all_parts) + 1:  # +1 for total row
+        messagebox.showerror("Błąd", "Niezgodność danych między tabelą a listą części.")
+        return
+
+    for idx, item in enumerate(tree_items[:-1]):  # Exclude total row
+        vals = tree.item(item, 'values')
+        if len(vals) < 11:
+            vals = vals + ('', '') * (11 - len(vals))
+        all_parts[idx]['qty'] = int(vals[5] or 0)
+        all_parts[idx]['cost_per_unit'] = _parse_float(vals[6]) or 0.0
+        all_parts[idx]['bending_per_unit'] = _parse_float(vals[7]) or 0.0
+        all_parts[idx]['additional_per_unit'] = _parse_float(vals[8]) or 0.0
+
+    # Log start
+    log_path = os.path.join(raporty_path, "cost_calculation_log.txt")
+    with open(log_path, 'w', encoding='utf-8') as log:
+        log.write(f"Log obliczeń - {datetime.datetime.now()}\n")
+        log.write(f"Folder: {folder_path}\n")
+        log.write(f"Klient: {customer_name}\n")
+        log.write("Źródła cen: materials prices.xlsx, cutting prices.xlsx\n")
+        log.write("\nSzczegóły obliczeń:\n")
+
+    # Generate DOCX
     doc = Document()
+    sections = doc.sections
+    for section in sections:
+        section.left_margin = Cm(1)
+        section.right_margin = Cm(1)
     if logo_path and os.path.exists(logo_path):
-        try: doc.add_picture(logo_path, width=Inches(3.0))
-        except Exception: pass
+        try:
+            doc.add_picture(logo_path, width=Inches(3.0))
+        except Exception:
+            pass
     if contact_details:
         p = doc.add_paragraph(contact_details)
-        for r in p.runs: r.bold = False
+        for r in p.runs:
+            r.bold = False
 
     doc.add_heading(f"Oferta dla {customer_name}", level=1)
-    p = doc.add_paragraph(f"Numer oferty: {offer_number}"); p.runs[0].bold = True
+    p = doc.add_paragraph(f"Numer oferty: {offer_number}")
+    p.runs[0].bold = True
     doc.add_paragraph(f"Data oferty: {offer_date}")
     doc.add_paragraph(f"Okres ważności: {validity}")
-    if preceding_text: doc.add_paragraph(preceding_text)
+    if preceding_text:
+        doc.add_paragraph(preceding_text)
 
-    table = doc.add_table(rows=1, cols=5); table.style = 'Table Grid'
-    hdr = table.rows[0].cells; hdr[0].text='Lp.'; hdr[1].text='Nazwa części'; hdr[2].text='Ilość'; hdr[3].text='Koszt (PLN)'; hdr[4].text='Razem (PLN)'
+    table = doc.add_table(rows=1, cols=7)
+    table.style = 'Table Grid'
+    hdr = table.rows[0].cells
+    hdr[0].text = 'Lp.'
+    hdr[1].text = 'Miniatura'
+    hdr[2].text = 'Nazwa części'
+    hdr[3].text = 'Ilość'
+    hdr[4].text = 'Waga netto'
+    hdr[5].text = 'Koszt (PLN)'
+    hdr[6].text = 'Razem (PLN)'
     for cell in table.rows[0].cells:
-        tcPr = cell._tc.get_or_add_tcPr(); shd = OxmlElement('w:shd'); shd.set(qn('w:val'), 'clear'); shd.set(qn('w:color'), 'auto'); shd.set(qn('w:fill'), '006995'); tcPr.append(shd)
-        run = cell.paragraphs[0].runs[0]; run.font.color.rgb = RGBColor(255,255,255); run.bold = True; run.font.size = Pt(11)
+        tcPr = cell._tc.get_or_add_tcPr()
+        shd = OxmlElement('w:shd')
+        shd.set(qn('w:val'), 'clear')
+        shd.set(qn('w:color'), 'auto')
+        shd.set(qn('w:fill'), '006995')
+        tcPr.append(shd)
+        run = cell.paragraphs[0].runs[0]
+        run.font.color.rgb = RGBColor(255, 255, 255)
+        run.bold = True
+        run.font.size = Pt(11)
 
-    total = 0.0; lp = 1
+    total = 0.0
+    lp = 1
     for mat_name, thk, parts in last_groups:
-        row = table.add_row().cells; row[0].text=""; row[1].text=f"Materiał: {mat_name}, Grubość: {thk} mm"; row[1].merge(row[4])
-        run = row[1].paragraphs[0].runs[0]; run.font.size = Pt(9); run.italic = True
+        row = table.add_row().cells
+        row[0].text = ""
+        row[1].text = ""
+        row[2].text = f"Materiał: {mat_name}, Grubość: {thk} mm"
+        row[2].merge(row[6])
+        run = row[2].paragraphs[0].runs[0]
+        run.font.size = Pt(9)
+        run.italic = True
         for nm, cost_per_unit, qty in parts:
+            part = next(p for p in all_parts if p['name'] == nm)
             r = table.add_row().cells
-            r[0].text = str(lp); r[1].text = str(nm) if nm else "Brak nazwy"
-            r[2].paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.RIGHT; r[2].paragraphs[0].add_run(f"{int(qty)}  ").font.size = Pt(10)
-            r[3].paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.RIGHT; r[3].paragraphs[0].add_run(f"{format_pln(cost_per_unit)}  ").font.size = Pt(10)
-            row_total = cost_per_unit * qty
-            r[4].paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.RIGHT; r[4].paragraphs[0].add_run(f"{format_pln(row_total)}  ").font.size = Pt(10)
-            total += row_total; lp += 1
+            r[0].text = str(lp)
+            # Embed graphic in column 2 (Miniatura)
+            if part['thumb_data']:
+                try:
+                    run = r[1].add_paragraph().add_run()
+                    run.add_picture(io.BytesIO(part['thumb_data']))
+                except Exception:
+                    pass
+            r[2].text = str(nm) if nm else "Brak nazwy"
+            r[3].paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.RIGHT
+            r[3].paragraphs[0].add_run(f"{int(part['qty'])}  ").font.size = Pt(10)
+            r[4].paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.RIGHT
+            r[4].paragraphs[0].add_run(f"{format_pln(part['raw_weight'])}  ").font.size = Pt(10)
+            r[5].paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.RIGHT
+            r[5].paragraphs[0].add_run(f"{format_pln(part['cost_per_unit'] + part['bending_per_unit'] + part['additional_per_unit'])}  ").font.size = Pt(10)
+            row_total = (part['cost_per_unit'] + part['bending_per_unit'] + part['additional_per_unit']) * part['qty']
+            r[6].paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.RIGHT
+            r[6].paragraphs[0].add_run(f"{format_pln(row_total)}  ").font.size = Pt(10)
+            total += row_total
+            lp += 1
 
-    srow = table.add_row().cells; srow[1].text="Razem"; srow[4].text=format_pln(total); srow[4].paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.RIGHT
-    for r in srow[1].paragraphs[0].runs: r.bold=True
-    for r in srow[4].paragraphs[0].runs: r.bold=True
+    srow = table.add_row().cells
+    srow[1].text = ""
+    srow[2].text = "Razem"
+    srow[4].text = ""
+    srow[6].text = format_pln(total)
+    srow[6].paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.RIGHT
+    for r in srow[2].paragraphs[0].runs:
+        r.bold = True
+    for r in srow[6].paragraphs[0].runs:
+        r.bold = True
 
-    widths = [Cm(1), Cm(8), Cm(2), Cm(3), Cm(3)]
+    widths = [Cm(1), Cm(2), Cm(6), Cm(2), Cm(2), Cm(3), Cm(3)]
     for i, w in enumerate(widths):
-        for cell in table.columns[i].cells: cell.width = w
+        for cell in table.columns[i].cells:
+            cell.width = w
 
-    p = doc.add_paragraph(f"Całkowity koszt: {format_pln(total)} PLN"); p.paragraph_format.space_before = Pt(12)
-    for r in p.runs: r.font.size = Pt(14)
+    p = doc.add_paragraph(f"Całkowity koszt: {format_pln(total)} PLN")
+    p.paragraph_format.space_before = Pt(12)
+    for r in p.runs:
+        r.font.size = Pt(14)
     if finishing_text:
         pf = doc.add_paragraph(finishing_text)
-        for r in pf.runs: r.font.size = Pt(9)
+        for r in pf.runs:
+            r.font.size = Pt(9)
 
     current_date = datetime.datetime.now().strftime("%Y%m%d")
+    offer_number = offer_number.replace('/', '-')
     fname = f"Oferta_{sanitize_filename(customer_name) or 'Klient'}_{current_date}_{offer_number}.docx"
-    full = os.path.join(folder_path, fname)
+    full = os.path.join(raporty_path, fname)
     try:
-        doc.save(full); messagebox.showinfo("Sukces", f"Raport wygenerowany:\n{fname}")
+        doc.save(full)
     except Exception as e:
         messagebox.showerror("Błąd", f"Nie udało się zapisać pliku DOCX:\n{e}")
+        return
+
+    # Generate cost report XLSX with thumbnails
+    cost_wb = Workbook()
+    cost_ws = cost_wb.active
+    cost_ws.title = "Podsumowanie"
+
+    cost_ws.append(["ID", "Nazwa", "Materiał", "Grubość", "Ilość", "Koszt jednostkowy (bez narzutów)", "Gięcie (75%)", "Dodatkowe", "Koszt całkowity", "Miniatura"])
+
+    cost_total = 0.0
+    row_num = 2  # Start from row 2
+    for part in all_parts:
+        unit_cost = part['base_cost_per_unit']
+        bending = part['bending_per_unit'] * 0.75
+        additional = part['additional_per_unit']
+        total_unit = unit_cost + bending + additional
+        total_part = total_unit * part['qty']
+        cost_total += total_part
+
+        cost_ws.append([part['id'], part['name'], part['material'], part['thickness'], part['qty'], unit_cost, bending, additional, total_part])
+
+        # Add thumbnail if available
+        if part['thumb_data']:
+            img = OpenpyxlImage(io.BytesIO(part['thumb_data']))
+            img.width = 1.0  # Adjust size as needed
+            img.height = 1.0
+            cost_ws.add_image(img, 'J' + str(row_num))
+
+        # Log
+        with open(log_path, 'a', encoding='utf-8') as log:
+            log.write(f"{part['name']}: Jednostkowy (bez narzutów) {unit_cost}, Gięcie {bending}, Dodatkowe {additional}, Całkowity {total_part}\n")
+
+        row_num += 1
+
+    cost_ws.append(["", "", "", "", "Suma", cost_total])
+
+    # Add detailed sheet
+    detail_ws = cost_wb.create_sheet(title="Szczegóły kosztów")
+    detail_ws.append(["ID", "Składowa", "Wartość jednostkowa", "Wartość całkowita", "Opis"])
+
+    for part in all_parts:
+        detail_ws.append([part['id'], "Materiał", format_pln(part['adj_weight'] * part['base_price_per_kg']), format_pln(part['adj_weight'] * part['base_price_per_kg'] * part['qty']), "Koszt materiału z utylizacją"])
+        detail_ws.append([part['id'], "Cięcie", format_pln(part['cut_length'] * part['base_rate_per_cut_length']), format_pln(part['cut_length'] * part['base_rate_per_cut_length'] * part['qty']), "Koszt cięcia"])
+        detail_ws.append([part['id'], "Kontury", format_pln(part['contours_qty'] * part['rate_per_contour']), format_pln(part['contours_qty'] * part['rate_per_contour'] * part['qty']), "Koszt konturów"])
+        detail_ws.append([part['id'], "Marking", format_pln(part['marking_length'] * part['rate_per_marking_length']), format_pln(part['marking_length'] * part['rate_per_marking_length'] * part['qty']), "Koszt marking"])
+        detail_ws.append([part['id'], "Defilm", format_pln(part['defilm_length'] * part['rate_per_defilm_length']), format_pln(part['defilm_length'] * part['rate_per_defilm_length'] * part['qty']), "Koszt defilm"])
+        detail_ws.append([part['id'], "Overheads", format_pln((part['extra_per_part'] + part['op_cost_per_part']) * part['qty']), "Koszty operacyjne i dodatkowe"])
+
+    # Add chart for cost components of entire order
+    from openpyxl.chart import PieChart, Reference
+    pie = PieChart()
+    labels = Reference(detail_ws, min_col=2, min_row=1, max_row=detail_ws.max_row)
+    data = Reference(detail_ws, min_col=4, min_row=2, max_row=detail_ws.max_row)
+    pie.add_data(data, titles_from_data=True)
+    pie.set_categories(labels)
+    pie.title = "Składowe kosztów całego zlecenia"
+    cost_ws.add_chart(pie, "M2")
+
+    # Add financial result graphics (bar chart: costs vs assumed profit)
+    from openpyxl.chart import BarChart
+    bar = BarChart()
+    bar.type = "col"
+    bar.title = "Wynik finansowy na zleceniu"
+    bar_data = Reference(cost_ws, min_col=9, min_row=row_num-1, max_col=9, max_row=row_num-1)  # Total cost
+    bar.add_data(bar_data, titles_from_data=True)
+    # Assume profit as 20% of total cost for demo
+    profit = cost_total * 0.2
+    cost_ws.cell(row=row_num, column=10).value = "Zysk (założony 20%)"
+    cost_ws.cell(row=row_num, column=11).value = profit
+    bar_profit_data = Reference(cost_ws, min_col=11, min_row=row_num, max_col=11, max_row=row_num)
+    bar.add_data(bar_profit_data, titles_from_data=True)
+    cost_ws.add_chart(bar, "M15")
+
+    cost_wb.save(os.path.join(raporty_path, "Raport kosztów.xlsx"))
+
+    # Generate client report XLSX with thumbnails
+    client_wb = Workbook()
+    client_ws = client_wb.active
+    client_ws.title = "Koszty dla klienta"
+
+    client_ws.append(["ID", "Nazwa", "Materiał", "Grubość", "Ilość", "Koszt jednostkowy (z narzutami)", "Gięcie", "Dodatkowe", "Koszt całkowity", "Miniatura"])
+
+    client_total = 0.0
+    row_num = 2  # Start from row 2
+    for part in all_parts:
+        unit_cost = part['cost_per_unit']
+        bending = part['bending_per_unit']
+        additional = part['additional_per_unit']
+        total_unit = unit_cost + bending + additional
+        total_part = total_unit * part['qty']
+        client_total += total_part
+
+        client_ws.append([part['id'], part['name'], part['material'], part['thickness'], part['qty'], unit_cost, bending, additional, total_part])
+
+        # Add thumbnail if available
+        if part['thumb_data']:
+            img = OpenpyxlImage(io.BytesIO(part['thumb_data']))
+            img.width = 1.0  # Adjust size as needed
+            img.height = 1.0
+            client_ws.add_image(img, 'J' + str(row_num))
+
+        # Log
+        with open(log_path, 'a', encoding='utf-8') as log:
+            log.write(f"{part['name']}: Jednostkowy (z narzutami) {unit_cost}, Gięcie {bending}, Dodatkowe {additional}, Całkowity {total_part}\n")
+
+        row_num += 1
+
+    client_ws.append(["", "", "", "", "Suma", client_total])
+
+    client_wb.save(os.path.join(raporty_path, "Raport dla klienta.xlsx"))
+
+    messagebox.showinfo("Sukces", "Raporty wygenerowane w folderze Raporty.")
 
 # przyciski lewe
 ttk.Button(buttons_frame, text="Analizuj XLSX", command=analyze_xlsx_folder).pack(side="left", padx=5)

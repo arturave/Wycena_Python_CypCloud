@@ -25,6 +25,9 @@ from tkinter import filedialog, messagebox
 from openpyxl import load_workbook
 from openpyxl import Workbook
 from openpyxl.drawing.image import Image as OpenpyxlImage
+from openpyxl.styles import Font, PatternFill, Alignment
+from openpyxl.chart import PieChart, BarChart, Reference
+from openpyxl.chart.label import DataLabelList
 from docx import Document
 from docx.shared import Inches, RGBColor, Pt, Cm
 from docx.enum.text import WD_ALIGN_PARAGRAPH
@@ -188,7 +191,7 @@ ttk.Label(left_frame, text="").grid(row=8, column=0, pady=10)
 ttk.Label(left_frame, text="Tekst kończący:").grid(row=9, column=0, sticky="ne")
 finishing_text_var = tk.Text(left_frame, height=10, width=50, bg="#3c3c3c", fg="white", insertbackground="white")
 finishing_text_var.grid(row=9, column=1)
-finishing_text_var.insert(tk.INSERT, "Wyłączenia odpowiedzialności \r\nDokumentacja techniczna\r\nRealizacja zamówienia odbywa się wyłącznie na podstawie dokumentacji technicznej dostarczonej przez Klienta. Odpowiedzialność za jej kompletność, poprawność oraz zgodność z założeniami projektowymi leży wyłącznie po stronie Zleceniodawcy. Wszelkie błędy, niejasności, czy niezgodności w przesłanych plikach uniemożliwiające prawidłowe wykonanie wyrobu, nie mogą stanowić podstawy do roszczeń wobec naszej firmy.\r\n\r\nMateriał powierzone i dostarczany przez Klienta\r\nNie ponosimy odpowiedzialności za uszkodzenia, błędy obróbki, zmiany struktury, odkształcenia ani inne wady powstałe w wyniku specyficznych właściwości materiału powierzonego przez Klienta, jego niejednorodności, błędnej deklaracji gatunku, braku wymaganych atestów czy oznaczeń partii. Klient zobowiązany jest dostarczyć materiał zgodny ze specyfikacją oraz wolny od wad fizycznych i chemicznych, mogących negatywnie wpływać na proces cięcia i jakość finalnego wyrobu.\r\n\r\nDostawcy materiałów\r\nNasza firma dołoży wszelkich starań w zakresie selekcji i zakupów materiałów wyłącznie od sprawdzonych dostawców. Zastrzegamy sobie jednak, że odpowiedzialność za parametry, właściwości lub wady ukryte materiału ogranicza się wyłącznie do zakresu wynikającego z dokumentacji danego producenta lub certyfikatu jakości – zgodnie z obowiązującym prawem oraz praktyką rynku stalowego.\r\n\r\nOgraniczenie odpowiedzialności prawnej\r\nOdpowiadamy wyłącznie za zgodność wykonanych prac z przesłaną dokumentacją oraz z obowiązującymi normami i przepisami prawa. Nie ponosimy odpowiedzialności za ewentualne szkody pośrednie, utracone korzyści, koszty produkcji, opóźnienia wynikające z przerw w dostawie materiałów, siły wyższej, zdarzeń losowych czy skutków niezastosowania się Klienta do obowiązujących przepisów i wymogów technicznych.\r\n\r\nPrzepisy prawa i gwarancje\r\nWszelkie realizacje podlegają przepisom prawa polskiego, normom branżowym oraz ustaleniom indywidualnym zawartym w zamówieniu. Ewentualna odpowiedzialność spółki ogranicza się do wartości usługi, a w szczególnych wypadkach – do ponownego wykonania usługi lub zwrotu jej kosztu. Nie udzielamy gwarancji na materiały powierzone, a zakres gwarancji na produkty wykonane z własnych materiałów jest określony indywidualnie w ofercie i na fakturze.\r\n\r\nMamy nadzieję, że powyższe wyjaśnienia pozwolą na jasne i czytelne określenie zasad współpracy oraz przyczynią się do pomyślnej realizacji Państwa zamówienia. Zapraszamy do zapoznania się ze szczegółami przygotowanej oferty oraz kontaktu w przypadku pytań lub wątpliwości.\r\n\r\nZ wyrazami szacunku,\r\nLaserTeam")
+finishing_text_var.insert(tk.INSERT, "Wyłączenia odpowiedzialności \r\nDokumentacja techniczna\r\nRealizacja zamówienia odbywa się wyłącznie na podstawie dokumentacji technicznej dostarczonej przez Klienta. Odpowiedzialność za jej kompletność, poprawność oraz zgodność z założeniami projektowymi leży wyłącznie po stronie Zleceniodawcy. Wszelkie błędy, niejasności, czy niezgodności w przesłanych plikach uniemożliwiające prawidłowe wykonanie wyrobu, nie mogą stanowić podstawy do roszczeń wobec naszej firmy.\r\n\r\nMateriał powierzone i dostarczany przez Klienta\r\nNie ponosimy odpowiedzialności za uszkodzenia, błędy obróbki, zmiany struktury, odkształcenia ani inne wady powstałe w wyniku specyficznych właściwości materiału powierzonego przez Klienta, jego niejednorodności, błędnej deklaracji gatunku, braku wymaganych atestów czy oznaczeń partii. Klient zobowiązany jest dostarczyć materiał zgodny ze specyfikacją oraz wolny od wad fizycznych i chemicznych, mogących negatywnie wpływać na proces cięcia i jakość finalnego wyrobu.\r\n\r\nDostawcy materiałów\r\nNasza firma dołoży wszelkich starań w zakresie selekcji i zakupów materiałów wyłącznie od sprawdzonych dostawców. Zastrzegamy sobie jednak, że odpowiedzialność za parametry, właściwości lub wady ukryte materiału ogranicza się wyłącznie do zakresu wynikającego z dokumentacji danego producenta lub certyfikatu jakości — zgodnie z obowiązującym prawem oraz praktyką rynku stalowego.\r\n\r\nOgraniczenie odpowiedzialności prawnej\r\nOdpowiadamy wyłącznie za zgodność wykonanych prac z przesłaną dokumentacją oraz z obowiązującymi normami i przepisami prawa. Nie ponosimy odpowiedzialności za ewentualne szkody pośrednie, utracone korzyści, koszty produkcji, opóźnienia wynikające z przerw w dostawie materiałów, siły wyższej, zdarzeń losowych czy skutków niezastosowania się Klienta do obowiązujących przepisów i wymogów technicznych.\r\n\r\nPrzepisy prawa i gwarancje\r\nWszelkie realizacje podlegają przepisom prawa polskiego, normom branżowym oraz ustaleniom indywidualnym zawartym w zamówieniu. Ewentualna odpowiedzialność spółki ogranicza się do wartości usługi, a w szczególnych wypadkach — do ponownego wykonania usługi lub zwrotu jej kosztu. Nie udzielamy gwarancji na materiały powierzone, a zakres gwarancji na produkty wykonane z własnych materiałów jest określony indywidualnie w ofercie i na fakturze.\r\n\r\nMamy nadzieję, że powyższe wyjaśnienia pozwolą na jasne i czytelne określenie zasad współpracy oraz przyczynią się do pomyślnej realizacji Państwa zamówienia. Zapraszamy do zapoznania się ze szczegółami przygotowanej oferty oraz kontaktu w przypadku pytań lub wątpliwości.\r\n\r\nZ wyrazami szacunku,\r\nLaserTeam")
 
 ttk.Label(left_frame, text="Odczytane pliki:").grid(row=10, column=0, sticky="ne")
 file_list = tk.Listbox(left_frame, height=5, width=50, bg="#3c3c3c", fg="white")
@@ -778,8 +781,12 @@ def analyze_xlsx_folder():
                     'marking_length': marking_length,
                     'defilm_length': defilm_length,
                     'adj_weight': adj_weight,
+                    'base_price_per_kg': base_price_per_kg,
                     'base_rate_per_cut_length': base_rate_per_cut_length,
                     'base_cut_cost': base_cut_cost,
+                    'rate_per_contour': rate_per_contour,
+                    'rate_per_marking_length': rate_per_marking_length,
+                    'rate_per_defilm_length': rate_per_defilm_length,
                     'thumb_data': thumbnail_data,  # Raw bytes
                 })
 
@@ -1042,8 +1049,8 @@ def generate_report():
             r.font.size = Pt(9)
 
     current_date = datetime.datetime.now().strftime("%Y%m%d")
-    offer_number = offer_number.replace('/', '-')
-    fname = f"Oferta_{sanitize_filename(customer_name) or 'Klient'}_{current_date}_{offer_number}.docx"
+    # Keep the '/' replacement for filename
+    fname = f"Oferta_{sanitize_filename(customer_name) or 'Klient'}_{current_date}_{offer_number.replace('/', '-')}.docx"
     full = os.path.join(raporty_path, fname)
     try:
         doc.save(full)
@@ -1051,43 +1058,307 @@ def generate_report():
         messagebox.showerror("Błąd", f"Nie udało się zapisać pliku DOCX:\n{e}")
         return
 
-    # Generate cost report XLSX with thumbnails
+    # Generate enhanced cost report XLSX with detailed breakdown
     cost_wb = Workbook()
-    cost_ws = cost_wb.active
-    cost_ws.title = "Rzeczywiste koszty"
-
-    cost_ws.append(["ID", "Nazwa", "Materiał", "Grubość", "Ilość", "Koszt jednostkowy (bez narzutów)", "Gięcie (75%)", "Dodatkowe", "Koszt całkowity", "Miniatura"])
-
-    cost_total = 0.0
-    row_num = 2  # Start from row 2
+    
+    # Sheet 1: Detailed Cost Breakdown
+    detail_ws = cost_wb.active
+    detail_ws.title = "Szczegółowa kalkulacja"
+    
+    # Headers for detailed breakdown
+    headers = [
+        "ID", "Nazwa części", "Materiał", "Grubość [mm]", "Ilość [szt]",
+        "Waga jednostkowa [kg]", "Waga skorygowana [kg]", "Długość cięcia [m]",
+        "Ilość konturów", "Długość znakowania [m]", "Długość odfoliowania [m]",
+        "Cena materiału [PLN/kg]", "Stawka cięcia [PLN/m]", 
+        "Koszt materiału [PLN]", "Koszt cięcia [PLN]", "Koszt konturów [PLN]",
+        "Koszt znakowania [PLN]", "Koszt odfoliowania [PLN]",
+        "Koszt operacyjny [PLN]", "Koszt technologii [PLN]",
+        "Gięcie 75% [PLN]", "Koszty dodatkowe [PLN]",
+        "Koszt jednostkowy [PLN]", "Koszt całkowity [PLN]"
+    ]
+    
+    for col, header in enumerate(headers, 1):
+        cell = detail_ws.cell(row=1, column=col, value=header)
+        cell.font = Font(bold=True, color="FFFFFF")
+        cell.fill = PatternFill(start_color="366092", end_color="366092", fill_type="solid")
+        cell.alignment = Alignment(horizontal="center", vertical="center")
+    
+    # Calculate overhead distribution
+    if total_parts_qty > 0:
+        extra_per_part = (tech_per_order + add_costs_order) / total_parts_qty
+        op_cost_per_part = (total_sheets * op_cost_per_sheet) / total_parts_qty
+    else:
+        extra_per_part = 0.0
+        op_cost_per_part = 0.0
+    
+    # Data for charts
+    material_costs = 0.0
+    cutting_costs = 0.0
+    contour_costs = 0.0
+    marking_costs = 0.0
+    defilm_costs = 0.0
+    operational_costs = 0.0
+    technology_costs = 0.0
+    bending_costs = 0.0
+    additional_costs = 0.0
+    
+    row_num = 2
     for part in all_parts:
+        # Calculate individual cost components
+        base_mat_cost = part['adj_weight'] * part.get('base_price_per_kg', 0.0)
+        base_cut_cost = part.get('base_cut_cost', 0.0)
+        contour_cost = part.get('contours_qty', 0.0) * part.get('rate_per_contour', 0.0)
+        marking_cost = part.get('marking_length', 0.0) * part.get('rate_per_marking_length', 0.0)
+        defilm_cost = part.get('defilm_length', 0.0) * part.get('rate_per_defilm_length', 0.0)
+        
+        bending_75 = part.get('bending_per_unit', 0.0) * 0.75
+        unit_cost_base = (base_mat_cost + base_cut_cost + contour_cost + 
+                         marking_cost + defilm_cost + op_cost_per_part + 
+                         extra_per_part)
+        total_unit = unit_cost_base + bending_75 + part.get('additional_per_unit', 0.0)
+        total_part_cost = total_unit * part['qty']
+        
+        # Accumulate for charts
+        material_costs += base_mat_cost * part['qty']
+        cutting_costs += base_cut_cost * part['qty']
+        contour_costs += contour_cost * part['qty']
+        marking_costs += marking_cost * part['qty']
+        defilm_costs += defilm_cost * part['qty']
+        operational_costs += op_cost_per_part * part['qty']
+        technology_costs += extra_per_part * part['qty']
+        bending_costs += bending_75 * part['qty']
+        additional_costs += part.get('additional_per_unit', 0.0) * part['qty']
+        
+        # Write row data
+        row_data = [
+            part['id'],
+            part['name'],
+            part['material'],
+            part['thickness'],
+            part['qty'],
+            f"{part.get('raw_weight', 0.0):.3f}",
+            f"{part.get('adj_weight', 0.0):.3f}",
+            f"{part.get('cut_length', 0.0):.2f}",
+            part.get('contours_qty', 0),
+            f"{part.get('marking_length', 0.0):.2f}",
+            f"{part.get('defilm_length', 0.0):.2f}",
+            f"{part.get('base_price_per_kg', 0.0):.2f}",
+            f"{part.get('base_rate_per_cut_length', 0.0):.2f}",
+            f"{base_mat_cost:.2f}",
+            f"{base_cut_cost:.2f}",
+            f"{contour_cost:.2f}",
+            f"{marking_cost:.2f}",
+            f"{defilm_cost:.2f}",
+            f"{op_cost_per_part:.2f}",
+            f"{extra_per_part:.2f}",
+            f"{bending_75:.2f}",
+            f"{part.get('additional_per_unit', 0.0):.2f}",
+            f"{total_unit:.2f}",
+            f"{total_part_cost:.2f}"
+        ]
+        
+        for col, value in enumerate(row_data, 1):
+            cell = detail_ws.cell(row=row_num, column=col, value=value)
+            if col >= 6:  # Numeric columns
+                cell.alignment = Alignment(horizontal="right")
+        
+        # Add thumbnail in column 25
+        if part.get('thumb_data'):
+            try:
+                img = OpenpyxlImage(io.BytesIO(part['thumb_data']))
+                img.width = 60
+                img.height = 40
+                detail_ws.add_image(img, f'Y{row_num}')
+                detail_ws.row_dimensions[row_num].height = 45
+            except Exception:
+                pass
+        
+        row_num += 1
+    
+    # Add totals row
+    total_row = row_num
+    detail_ws.cell(row=total_row, column=2, value="SUMA CAŁKOWITA").font = Font(bold=True)
+    detail_ws.cell(row=total_row, column=24, value=f"{sum(float(detail_ws.cell(row=r, column=24).value) for r in range(2, row_num)):.2f}").font = Font(bold=True)
+    
+    # Autofit columns
+    for column in detail_ws.columns:
+        max_length = 0
+        column_letter = column[0].column_letter
+        for cell in column:
+            try:
+                if cell.value:
+                    max_length = max(max_length, len(str(cell.value)))
+            except:
+                pass
+        adjusted_width = min(max_length + 2, 30)
+        detail_ws.column_dimensions[column_letter].width = adjusted_width
+    
+    # Sheet 2: Summary (Synthetic form)
+    summary_ws = cost_wb.create_sheet("Podsumowanie")
+    
+    summary_headers = ["ID", "Nazwa", "Materiał", "Grubość", "Ilość", 
+                      "Koszt jednostkowy", "Gięcie (75%)", "Dodatkowe", 
+                      "Koszt całkowity"]
+    
+    for col, header in enumerate(summary_headers, 1):
+        cell = summary_ws.cell(row=1, column=col, value=header)
+        cell.font = Font(bold=True, color="FFFFFF")
+        cell.fill = PatternFill(start_color="366092", end_color="366092", fill_type="solid")
+    
+    summary_total = 0.0
+    for idx, part in enumerate(all_parts, 2):
         unit_cost = part['base_cost_per_unit']
-        bending = part['bending_per_unit'] * 0.75
-        additional = part['additional_per_unit']
+        bending = part.get('bending_per_unit', 0.0) * 0.75
+        additional = part.get('additional_per_unit', 0.0)
         total_unit = unit_cost + bending + additional
         total_part = total_unit * part['qty']
-        cost_total += total_part
-
-        cost_ws.append([part['id'], part['name'], part['material'], part['thickness'], part['qty'], unit_cost, bending, additional, total_part])
-
-        # Add thumbnail if available
-        if part['thumb_data']:
-            img = OpenpyxlImage(io.BytesIO(part['thumb_data']))
-            img.width = 1.0  # Adjust size as needed
-            img.height = 1.0
-            cost_ws.add_image(img, 'J' + str(row_num))
-
-        # Log
-        with open(log_path, 'a', encoding='utf-8') as log:
-            log.write(f"{part['name']}: Jednostkowy (bez narzutów) {unit_cost}, Gięcie {bending}, Dodatkowe {additional}, Całkowity {total_part}\n")
-
-        row_num += 1
-
-    cost_ws.append(["", "", "", "", "Suma", cost_total])
-
+        summary_total += total_part
+        
+        summary_ws.append([
+            part['id'], part['name'], part['material'], part['thickness'], 
+            part['qty'], f"{unit_cost:.2f}", f"{bending:.2f}", 
+            f"{additional:.2f}", f"{total_part:.2f}"
+        ])
+    
+    summary_ws.append(["", "", "", "", "SUMA", "", "", "", f"{summary_total:.2f}"])
+    summary_ws.cell(row=summary_ws.max_row, column=5).font = Font(bold=True)
+    summary_ws.cell(row=summary_ws.max_row, column=9).font = Font(bold=True)
+    
+    # Sheet 3: Charts and Analysis
+    chart_ws = cost_wb.create_sheet("Wykresy i Analiza")
+    
+    # Financial summary data
+    chart_ws['A1'] = "ANALIZA FINANSOWA ZLECENIA"
+    chart_ws['A1'].font = Font(bold=True, size=14)
+    
+    chart_ws['A3'] = "Składnik kosztów"
+    chart_ws['B3'] = "Wartość [PLN]"
+    chart_ws['C3'] = "Udział [%]"
+    
+    total_costs = (material_costs + cutting_costs + contour_costs + marking_costs + 
+                  defilm_costs + operational_costs + technology_costs + 
+                  bending_costs + additional_costs)
+    
+    cost_components = [
+        ("Materiał", material_costs),
+        ("Cięcie laserowe", cutting_costs),
+        ("Kontury", contour_costs),
+        ("Znakowanie", marking_costs),
+        ("Odfoliowanie", defilm_costs),
+        ("Koszty operacyjne", operational_costs),
+        ("Technologia", technology_costs),
+        ("Gięcie", bending_costs),
+        ("Koszty dodatkowe", additional_costs)
+    ]
+    
+    for idx, (name, value) in enumerate(cost_components, 4):
+        chart_ws.cell(row=idx, column=1, value=name)
+        chart_ws.cell(row=idx, column=2, value=f"{value:.2f}")
+        percentage = (value / total_costs * 100) if total_costs > 0 else 0
+        chart_ws.cell(row=idx, column=3, value=f"{percentage:.1f}%")
+    
+    # Total row
+    chart_ws.cell(row=13, column=1, value="RAZEM").font = Font(bold=True)
+    chart_ws.cell(row=13, column=2, value=f"{total_costs:.2f}").font = Font(bold=True)
+    chart_ws.cell(row=13, column=3, value="100.0%").font = Font(bold=True)
+    
+    # Pie Chart - Cost Distribution
+    pie = PieChart()
+    pie.title = "Rozkład kosztów zlecenia"
+    pie.width = 12
+    pie.height = 8
+    
+    data = Reference(chart_ws, min_col=2, min_row=3, max_row=12)
+    categories = Reference(chart_ws, min_col=1, min_row=4, max_row=12)
+    pie.add_data(data, titles_from_data=True)
+    pie.set_categories(categories)
+    pie.dataLabels = DataLabelList()
+    pie.dataLabels.showPercent = True
+    
+    chart_ws.add_chart(pie, "E3")
+    
+    # Bar Chart - Cost Components
+    bar = BarChart()
+    bar.title = "Składniki kosztów [PLN]"
+    bar.width = 14
+    bar.height = 8
+    bar.style = 10
+    bar.x_axis.title = "Składnik"
+    bar.y_axis.title = "Wartość [PLN]"
+    
+    bar_data = Reference(chart_ws, min_col=2, min_row=3, max_row=12)
+    bar_categories = Reference(chart_ws, min_col=1, min_row=4, max_row=12)
+    bar.add_data(bar_data, titles_from_data=True)
+    bar.set_categories(bar_categories)
+    
+    chart_ws.add_chart(bar, "E15")
+    
+    # Financial Result Summary
+    chart_ws['A28'] = "WYNIK FINANSOWY"
+    chart_ws['A28'].font = Font(bold=True, size=12)
+    
+    # Calculate the profit margin based on customer price vs base costs
+    client_total = total  # This is the price for the customer
+    margin = client_total - total_costs
+    margin_percent = (margin / total_costs * 100) if total_costs > 0 else 0
+    
+    chart_ws['A30'] = "Koszty całkowite:"
+    chart_ws['B30'] = f"{total_costs:.2f} PLN"
+    chart_ws['A31'] = "Cena dla klienta:"
+    chart_ws['B31'] = f"{client_total:.2f} PLN"
+    chart_ws['A32'] = "Marża:"
+    chart_ws['B32'] = f"{margin:.2f} PLN ({margin_percent:.1f}%)"
+    
+    # Color formatting for financial result
+    chart_ws['B32'].font = Font(bold=True, color="008000" if margin > 0 else "FF0000")
+    
+    # Sheet 4: Material usage statistics
+    material_ws = cost_wb.create_sheet("Statystyki materiałów")
+    
+    material_ws['A1'] = "WYKORZYSTANIE MATERIAŁÓW"
+    material_ws['A1'].font = Font(bold=True, size=12)
+    
+    # Group by material and thickness
+    material_groups = {}
+    for part in all_parts:
+        key = (part['material'], part['thickness'])
+        if key not in material_groups:
+            material_groups[key] = {
+                'weight': 0, 'cut_length': 0, 'parts': 0, 'cost': 0
+            }
+        material_groups[key]['weight'] += part['adj_weight'] * part['qty']
+        material_groups[key]['cut_length'] += part['cut_length'] * part['qty']
+        material_groups[key]['parts'] += part['qty']
+        material_groups[key]['cost'] += part['base_cost_per_unit'] * part['qty']
+    
+    material_ws['A3'] = "Materiał"
+    material_ws['B3'] = "Grubość [mm]"
+    material_ws['C3'] = "Waga [kg]"
+    material_ws['D3'] = "Długość cięcia [m]"
+    material_ws['E3'] = "Ilość części"
+    material_ws['F3'] = "Koszt [PLN]"
+    
+    for col in range(1, 7):
+        material_ws.cell(row=3, column=col).font = Font(bold=True)
+        material_ws.cell(row=3, column=col).fill = PatternFill(
+            start_color="D9D9D9", end_color="D9D9D9", fill_type="solid"
+        )
+    
+    row = 4
+    for (material, thickness), stats in material_groups.items():
+        material_ws.cell(row=row, column=1, value=material)
+        material_ws.cell(row=row, column=2, value=thickness)
+        material_ws.cell(row=row, column=3, value=f"{stats['weight']:.2f}")
+        material_ws.cell(row=row, column=4, value=f"{stats['cut_length']:.2f}")
+        material_ws.cell(row=row, column=5, value=stats['parts'])
+        material_ws.cell(row=row, column=6, value=f"{stats['cost']:.2f}")
+        row += 1
+    
+    # Save the workbook
     cost_wb.save(os.path.join(raporty_path, "Raport kosztów.xlsx"))
 
-    # Generate client report XLSX with thumbnails
+    # Generate client report XLSX with thumbnails (keeping original functionality)
     client_wb = Workbook()
     client_ws = client_wb.active
     client_ws.title = "Koszty dla klienta"
@@ -1109,8 +1380,8 @@ def generate_report():
         # Add thumbnail if available
         if part['thumb_data']:
             img = OpenpyxlImage(io.BytesIO(part['thumb_data']))
-            img.width = 1.0  # Adjust size as needed
-            img.height = 1.0
+            img.width = 60
+            img.height = 40
             client_ws.add_image(img, 'J' + str(row_num))
 
         # Log
