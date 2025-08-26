@@ -25,7 +25,7 @@ from tkinter import filedialog, messagebox
 from openpyxl import load_workbook
 from openpyxl import Workbook
 from openpyxl.drawing.image import Image as OpenpyxlImage
-from openpyxl.styles import Font, PatternFill, Alignment
+from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
 from openpyxl.chart import PieChart, BarChart, Reference
 from openpyxl.chart.label import DataLabelList
 from docx import Document
@@ -37,6 +37,12 @@ import io
 from PIL import Image, ImageTk
 import locale
 import requests
+
+# wartość całego zlecenia
+
+def SetTotalPricePerOrder(value):
+    global total_price_per_order
+    total_price_per_order = value   
 
 try:
     locale.setlocale(locale.LC_ALL, 'pl_PL.UTF-8')
@@ -231,7 +237,7 @@ tree.heading("3", text="Nazwa");  tree.column("3", minwidth=150, width=400, stre
 tree.heading("4", text="Materiał"); tree.column("4", minwidth=50, width=80, stretch=tk.NO)
 tree.heading("5", text="Grubość");  tree.column("5", minwidth=50, width=80, stretch=tk.NO, anchor="e")
 tree.heading("6", text="Ilość");    tree.column("6", minwidth=50, width=80, stretch=tk.NO, anchor="e")
-tree.heading("7", text="Laser");    tree.column("7", minwidth=50, width=100, stretch=tk.NO, anchor="e")
+tree.heading("7", text="Koszt L+M");    tree.column("7", minwidth=50, width=100, stretch=tk.NO, anchor="e")
 tree.heading("8", text="Gięcie/szt."); tree.column("8", minwidth=50, width=100, stretch=tk.NO, anchor="e")
 tree.heading("9", text="Dodatkowe/szt."); tree.column("9", minwidth=50, width=120, stretch=tk.NO, anchor="e")
 tree.heading("10", text="Waga"); tree.column("10", minwidth=50, width=80, stretch=tk.NO, anchor="e")
@@ -266,17 +272,87 @@ def edit_cell(event):
 tree.bind("<Double-1>", edit_cell)
 panel_a.add(subpanel1, minsize=220)
 
-# --- PANEL 2 ---
-subpanel2 = tk.LabelFrame(panel_a, text="PANEL 2 — STAŁE KOSZTY", bg="#2c2c2c", fg="white")
+# --- PANEL 2 --- (Replace the existing Panel 2 section starting around line 258)
+subpanel2 = tk.LabelFrame(panel_a, text="PANEL 2 – STAŁE KOSZTY I KALKULACJA", bg="#2c2c2c", fg="white")
+
+# Existing fixed costs
 ttk.Label(subpanel2, text="Koszty operacyjne za arkusz:").grid(row=0, column=0, sticky="w")
-op_cost_entry = ttk.Entry(subpanel2); op_cost_entry.grid(row=0, column=1); op_cost_entry.insert(tk.INSERT, "40,00")
+op_cost_entry = ttk.Entry(subpanel2)
+op_cost_entry.grid(row=0, column=1)
+op_cost_entry.insert(tk.INSERT, "40,00")
+
 ttk.Label(subpanel2, text="Technologia za zlecenie:").grid(row=1, column=0, sticky="w")
-tech_order_entry = ttk.Entry(subpanel2); tech_order_entry.grid(row=1, column=1); tech_order_entry.insert(tk.INSERT, "50,00")
-ttk.Label(subpanel2, text="Dodatkowe koszty dla zlecenia (np. narzędzi):").grid(row=2, column=0, sticky="w")
-add_order_cost_entry = ttk.Entry(subpanel2); add_order_cost_entry.grid(row=2, column=1); add_order_cost_entry.insert(tk.INSERT, "0,00")
+tech_order_entry = ttk.Entry(subpanel2)
+tech_order_entry.grid(row=1, column=1)
+tech_order_entry.insert(tk.INSERT, "50,00")
+
+ttk.Label(subpanel2, text="Dodatkowe koszty dla zlecenia:").grid(row=2, column=0, sticky="w")
+add_order_cost_entry = ttk.Entry(subpanel2)
+add_order_cost_entry.grid(row=2, column=1)
+add_order_cost_entry.insert(tk.INSERT, "0,00")
+
+# New cutting time cost fields
+ttk.Label(subpanel2, text="").grid(row=0, column=2, pady=10)  # Separator
+ttk.Label(subpanel2, text="KALKULACJA CZASU CIĘCIA", font=("Arial", 10, "bold")).grid(row=4, column=0, columnspan=2, pady=(10, 5))
+
+ttk.Label(subpanel2, text="Stawka cięcia O₂ [PLN/h]:").grid(row=5, column=2, sticky="w")
+oxygen_rate_entry = ttk.Entry(subpanel2)
+oxygen_rate_entry.grid(row=5, column=3)
+oxygen_rate_entry.insert(tk.INSERT, "350,00")  # Default value
+
+ttk.Label(subpanel2, text="Stawka cięcia N₂ [PLN/h]:").grid(row=6, column=2, sticky="w")
+nitrogen_rate_entry = ttk.Entry(subpanel2)
+nitrogen_rate_entry.grid(row=6, column=1)
+nitrogen_rate_entry.insert(tk.INSERT, "550,00")  # Default value
+
+# Display fields for calculated values
+ttk.Label(subpanel2, text="").grid(row=7, column=0, pady=5)  # Separator
+ttk.Label(subpanel2, text="Czas cięcia O₂ [h]:").grid(row=8, column=0, sticky="w")
+oxygen_time_label = ttk.Label(subpanel2, text="0,00", relief="sunken", anchor="e", width=20)
+oxygen_time_label.grid(row=8, column=1, sticky="ew")
+
+ttk.Label(subpanel2, text="Czas cięcia N₂ [h]:").grid(row=9, column=0, sticky="w")
+nitrogen_time_label = ttk.Label(subpanel2, text="0,00", relief="sunken", anchor="e", width=20)
+nitrogen_time_label.grid(row=9, column=1, sticky="ew")
+
+ttk.Label(subpanel2, text="Koszt cięcia O₂ [PLN]:").grid(row=10, column=0, sticky="w")
+oxygen_cost_label = ttk.Label(subpanel2, text="0,00", relief="sunken", anchor="e", width=20)
+oxygen_cost_label.grid(row=10, column=1, sticky="ew")
+
+ttk.Label(subpanel2, text="Koszt cięcia N₂ [PLN]:").grid(row=11, column=0, sticky="w")
+nitrogen_cost_label = ttk.Label(subpanel2, text="0,00", relief="sunken", anchor="e", width=20)
+nitrogen_cost_label.grid(row=11, column=1, sticky="ew")
+
+ttk.Label(subpanel2, text="").grid(row=12, column=0, pady=5)  # Separator
+ttk.Label(subpanel2, text="PODSUMOWANIE KOSZTÓW", font=("Arial", 10, "bold")).grid(row=13, column=0, columnspan=2, pady=(10, 5))
+
+ttk.Label(subpanel2, text="Koszt materiału [PLN]:").grid(row=14, column=0, sticky="w")
+material_cost_label = ttk.Label(subpanel2, text="0,00", relief="sunken", anchor="e", width=20)
+material_cost_label.grid(row=14, column=1, sticky="ew")
+
+ttk.Label(subpanel2, text="Koszt cięcia łącznie [PLN]:").grid(row=15, column=0, sticky="w")
+total_cutting_cost_label = ttk.Label(subpanel2, text="0,00", relief="sunken", anchor="e", width=20)
+total_cutting_cost_label.grid(row=15, column=1, sticky="ew")
+
+ttk.Label(subpanel2, text="Koszty operacyjne [PLN]:").grid(row=16, column=0, sticky="w")
+operational_cost_label = ttk.Label(subpanel2, text="0,00", relief="sunken", anchor="e", width=20)
+operational_cost_label.grid(row=16, column=1, sticky="ew")
+
+ttk.Label(subpanel2, text="").grid(row=17, column=0, pady=5)  # Separator
+ttk.Label(subpanel2, text="SUMA WSZYSTKICH KOSZTÓW [PLN]:").grid(row=18, column=0, sticky="w")
+total_all_costs_label = ttk.Label(subpanel2, text="0,00", relief="sunken", anchor="e", width=20, font=("Arial", 11, "bold"))
+total_all_costs_label.grid(row=18, column=1, sticky="ew")
+
 subpanel2.update_idletasks()
-panel2_height = subpanel2.winfo_reqheight() + 20  # Dodatkowe miejsce na marginesy
+panel2_height = subpanel2.winfo_reqheight() + 20
 panel_a.add(subpanel2, height=panel2_height, minsize=panel2_height)
+
+# Add these after creating the entry fields in Panel 2:
+oxygen_rate_entry.bind('<FocusOut>', lambda e: update_cost_calculations() if all_parts else None)
+nitrogen_rate_entry.bind('<FocusOut>', lambda e: update_cost_calculations() if all_parts else None)
+op_cost_entry.bind('<FocusOut>', lambda e: update_cost_calculations() if all_parts else None)
+tech_order_entry.bind('<FocusOut>', lambda e: update_cost_calculations() if all_parts else None)
+add_order_cost_entry.bind('<FocusOut>', lambda e: update_cost_calculations() if all_parts else None)
 
 # --- PANEL 3 ---
 subpanel3 = tk.LabelFrame(panel_a, text="PANEL 3 — CENNIKI I TESTY", bg="#2c2c2c", fg="white", padx=6, pady=6)
@@ -587,11 +663,51 @@ def apply_dynamic_pricing(price_per_kg: float, rate_per_m: float, thickness_mm: 
     }
     return mat_adj, rate_adj, dbg
 
+
+def update_cost_calculations():
+    """Update all cost calculation displays in Panel 2"""
+    global oxygen_cutting_time, nitrogen_cutting_time, total_material_cost
+    
+    # Get rates from entries
+    oxygen_rate = _parse_float(oxygen_rate_entry.get()) or 0.0
+    nitrogen_rate = _parse_float(nitrogen_rate_entry.get()) or 0.0
+    op_cost_per_sheet = _parse_float(op_cost_entry.get()) or 0.0
+    tech_per_order = _parse_float(tech_order_entry.get()) or 0.0
+    add_costs_order = _parse_float(add_order_cost_entry.get()) or 0.0
+    
+    # Calculate cutting costs
+    oxygen_cost = oxygen_cutting_time * oxygen_rate
+    nitrogen_cost = nitrogen_cutting_time * nitrogen_rate
+    total_cutting_cost = oxygen_cost + nitrogen_cost
+    
+    # Calculate operational costs
+    operational_costs = (total_sheets * op_cost_per_sheet) + tech_per_order + add_costs_order
+    
+    # Calculate total
+    total_all_costs = total_material_cost + total_cutting_cost + operational_costs
+    
+    # Update display labels
+    oxygen_time_label.config(text=f"{oxygen_cutting_time:.2f}".replace('.', ','))
+    nitrogen_time_label.config(text=f"{nitrogen_cutting_time:.2f}".replace('.', ','))
+    oxygen_cost_label.config(text=format_pln(oxygen_cost))
+    nitrogen_cost_label.config(text=format_pln(nitrogen_cost))
+    material_cost_label.config(text=format_pln(total_material_cost))
+    total_cutting_cost_label.config(text=format_pln(total_cutting_cost))
+    operational_cost_label.config(text=format_pln(operational_costs))
+    total_all_costs_label.config(text=format_pln(total_all_costs))
+
 # Referencje do PhotoImage, żeby obrazy nie znikały (GC)
 thumbnail_imgs = []
 
 def analyze_xlsx_folder():
     global all_parts, last_groups, last_total_cost, last_folder_path, total_sheets, total_parts_qty, total_row_iid
+    global oxygen_cutting_time, nitrogen_cutting_time, total_material_cost  # Add these globals
+    
+    # Initialize cutting time accumulators
+    oxygen_cutting_time = 0.0
+    nitrogen_cutting_time = 0.0
+    total_material_cost = 0.0
+
     for item in tree.get_children():
         tree.delete(item)
     thumbnail_imgs.clear()
@@ -643,6 +759,13 @@ def analyze_xlsx_folder():
             mat_norm = _norm_s(material_name)
             thk_val = _parse_float(thickness_raw)
             gas_key = _map_gas_to_key(gas_raw)
+
+            # Add accumulation of cutting time by gas type:
+            if gas_key == "O":
+                oxygen_cutting_time += cut_time
+            elif gas_key == "N":
+                nitrogen_cutting_time += cut_time
+
             if not mat_norm:
                 raise ValueError("All Task List!B4 (Material) — brak wartości")
             if thk_val is None:
@@ -815,6 +938,15 @@ def analyze_xlsx_folder():
         p['cost_per_unit'] = float(f"{p['cost_per_unit']:.2f}")
         p['base_cost_per_unit'] = float(f"{p['base_cost_per_unit']:.2f}")
 
+    # Calculate material costs for all parts
+    for p in all_parts:
+        material_cost_per_part = p['adj_weight'] * p.get('base_price_per_kg', 0.0)
+        total_material_cost += material_cost_per_part * p['qty']
+    
+    # Update Panel 2 display fields
+    update_cost_calculations()
+
+
     # tabela
     for i, p in enumerate(all_parts, start=1):
         item_values = (
@@ -850,6 +982,7 @@ def analyze_xlsx_folder():
 
     # Add total row to treeview
     total_order = sum(p['cost_per_unit'] * p['qty'] for p in all_parts)
+    SetTotalPricePerOrder(total_order)
     total_row_iid = tree.insert('', 'end', values=('', '', 'Razem', '', '', '', format_pln(total_order), '', '', '', ''))
 
     total_sum = 0.0
@@ -878,7 +1011,8 @@ def update_total():
         bending = _parse_float(vals[7]) or 0
         additional = _parse_float(vals[8]) or 0
         total += (cost + bending + additional) * qty
-    tree.set(total_row_iid, column="6", value=format_pln(total))
+    tree.set(total_row_iid, column="7", value=format_pln(total))
+    SetTotalPricePerOrder(total)
 
 def get_next_offer_number():
     month_year = datetime.datetime.now().strftime("%m/%Y")
@@ -932,6 +1066,7 @@ def generate_report():
         all_parts[idx]['cost_per_unit'] = _parse_float(vals[6]) or 0.0
         all_parts[idx]['bending_per_unit'] = _parse_float(vals[7]) or 0.0
         all_parts[idx]['additional_per_unit'] = _parse_float(vals[8]) or 0.0
+
 
     # Log start
     log_path = os.path.join(raporty_path, "cost_calculation_log.txt")
@@ -1058,23 +1193,24 @@ def generate_report():
         messagebox.showerror("Błąd", f"Nie udało się zapisać pliku DOCX:\n{e}")
         return
 
-    # Generate enhanced cost report XLSX with detailed breakdown
+
+    # Generate enhanced cost report XLSX
     cost_wb = Workbook()
     
-    # Sheet 1: Detailed Cost Breakdown
+    # Sheet 1: Detailed Cost Breakdown with Thumbnail as column 2
     detail_ws = cost_wb.active
     detail_ws.title = "Szczegółowa kalkulacja"
     
-    # Headers for detailed breakdown
+    # Headers with Miniatura as second column
     headers = [
-        "ID", "Nazwa części", "Materiał", "Grubość [mm]", "Ilość [szt]",
+        "ID", "Miniatura", "Nazwa części", "Materiał", "Grubość [mm]", "Ilość [szt]",
         "Waga jednostkowa [kg]", "Waga skorygowana [kg]", "Długość cięcia [m]",
         "Ilość konturów", "Długość znakowania [m]", "Długość odfoliowania [m]",
         "Cena materiału [PLN/kg]", "Stawka cięcia [PLN/m]", 
         "Koszt materiału [PLN]", "Koszt cięcia [PLN]", "Koszt konturów [PLN]",
         "Koszt znakowania [PLN]", "Koszt odfoliowania [PLN]",
         "Koszt operacyjny [PLN]", "Koszt technologii [PLN]",
-        "Gięcie 75% [PLN]", "Koszty dodatkowe [PLN]",
+        "Gięcie [PLN]", "Koszty dodatkowe [PLN]",
         "Koszt jednostkowy [PLN]", "Koszt całkowity [PLN]"
     ]
     
@@ -1082,7 +1218,7 @@ def generate_report():
         cell = detail_ws.cell(row=1, column=col, value=header)
         cell.font = Font(bold=True, color="FFFFFF")
         cell.fill = PatternFill(start_color="366092", end_color="366092", fill_type="solid")
-        cell.alignment = Alignment(horizontal="center", vertical="center")
+        cell.alignment = Alignment(horizontal="center", vertical="center", wrap_text=True)
     
     # Calculate overhead distribution
     if total_parts_qty > 0:
@@ -1092,47 +1228,48 @@ def generate_report():
         extra_per_part = 0.0
         op_cost_per_part = 0.0
     
-    # Data for charts
-    material_costs = 0.0
-    cutting_costs = 0.0
-    contour_costs = 0.0
-    marking_costs = 0.0
-    defilm_costs = 0.0
-    operational_costs = 0.0
-    technology_costs = 0.0
-    bending_costs = 0.0
-    additional_costs = 0.0
+    # Data for corrected charts
+    cost_components = {
+        'Materiał': 0.0,
+        'Cięcie laserowe': 0.0,
+        'Kontury': 0.0,
+        'Znakowanie': 0.0,
+        'Odfoliowanie': 0.0,
+        'Koszty operacyjne': 0.0,
+        'Technologia': 0.0,
+        'Gięcie': 0.0,
+        'Koszty dodatkowe': 0.0
+    }
     
     row_num = 2
     for part in all_parts:
         # Calculate individual cost components
-        base_mat_cost = part['adj_weight'] * part.get('base_price_per_kg', 0.0)
-        base_cut_cost = part.get('base_cut_cost', 0.0)
+        mat_cost = part['adj_weight'] * part.get('base_price_per_kg', 0.0)
+        cut_cost = part.get('cut_length', 0.0) * part.get('base_rate_per_cut_length', 0.0)
         contour_cost = part.get('contours_qty', 0.0) * part.get('rate_per_contour', 0.0)
         marking_cost = part.get('marking_length', 0.0) * part.get('rate_per_marking_length', 0.0)
         defilm_cost = part.get('defilm_length', 0.0) * part.get('rate_per_defilm_length', 0.0)
+        bending_cost = part.get('bending_per_unit', 0.0)
         
-        bending_75 = part.get('bending_per_unit', 0.0) * 0.75
-        unit_cost_base = (base_mat_cost + base_cut_cost + contour_cost + 
-                         marking_cost + defilm_cost + op_cost_per_part + 
-                         extra_per_part)
-        total_unit = unit_cost_base + bending_75 + part.get('additional_per_unit', 0.0)
-        total_part_cost = total_unit * part['qty']
+        # Accumulate for charts (multiply by quantity for total costs)
+        cost_components['Materiał'] += mat_cost * part['qty']
+        cost_components['Cięcie laserowe'] += cut_cost * part['qty']
+        cost_components['Kontury'] += contour_cost * part['qty']
+        cost_components['Znakowanie'] += marking_cost * part['qty']
+        cost_components['Odfoliowanie'] += defilm_cost * part['qty']
+        cost_components['Koszty operacyjne'] += op_cost_per_part * part['qty']
+        cost_components['Technologia'] += extra_per_part * part['qty']
+        cost_components['Gięcie'] += bending_cost * part['qty']
+        cost_components['Koszty dodatkowe'] += part.get('additional_per_unit', 0.0) * part['qty']
         
-        # Accumulate for charts
-        material_costs += base_mat_cost * part['qty']
-        cutting_costs += base_cut_cost * part['qty']
-        contour_costs += contour_cost * part['qty']
-        marking_costs += marking_cost * part['qty']
-        defilm_costs += defilm_cost * part['qty']
-        operational_costs += op_cost_per_part * part['qty']
-        technology_costs += extra_per_part * part['qty']
-        bending_costs += bending_75 * part['qty']
-        additional_costs += part.get('additional_per_unit', 0.0) * part['qty']
+        unit_cost = (mat_cost + cut_cost + contour_cost + marking_cost + defilm_cost + 
+                    op_cost_per_part + extra_per_part + bending_cost + part.get('additional_per_unit', 0.0))
+        total_part_cost = unit_cost * part['qty']
         
-        # Write row data
+        # Write row data with proper column order (Miniatura as column 2)
         row_data = [
             part['id'],
+            '',  # Placeholder for thumbnail
             part['name'],
             part['material'],
             part['thickness'],
@@ -1145,31 +1282,31 @@ def generate_report():
             f"{part.get('defilm_length', 0.0):.2f}",
             f"{part.get('base_price_per_kg', 0.0):.2f}",
             f"{part.get('base_rate_per_cut_length', 0.0):.2f}",
-            f"{base_mat_cost:.2f}",
-            f"{base_cut_cost:.2f}",
+            f"{mat_cost:.2f}",
+            f"{cut_cost:.2f}",
             f"{contour_cost:.2f}",
             f"{marking_cost:.2f}",
             f"{defilm_cost:.2f}",
             f"{op_cost_per_part:.2f}",
             f"{extra_per_part:.2f}",
-            f"{bending_75:.2f}",
+            f"{bending_cost:.2f}",
             f"{part.get('additional_per_unit', 0.0):.2f}",
-            f"{total_unit:.2f}",
+            f"{unit_cost:.2f}",
             f"{total_part_cost:.2f}"
         ]
         
         for col, value in enumerate(row_data, 1):
             cell = detail_ws.cell(row=row_num, column=col, value=value)
-            if col >= 6:  # Numeric columns
+            if col >= 4:  # Numeric columns
                 cell.alignment = Alignment(horizontal="right")
         
-        # Add thumbnail in column 25
+        # Add thumbnail in column 2 (B)
         if part.get('thumb_data'):
             try:
                 img = OpenpyxlImage(io.BytesIO(part['thumb_data']))
                 img.width = 60
                 img.height = 40
-                detail_ws.add_image(img, f'Y{row_num}')
+                detail_ws.add_image(img, f'B{row_num}')
                 detail_ws.row_dimensions[row_num].height = 45
             except Exception:
                 pass
@@ -1178,8 +1315,8 @@ def generate_report():
     
     # Add totals row
     total_row = row_num
-    detail_ws.cell(row=total_row, column=2, value="SUMA CAŁKOWITA").font = Font(bold=True)
-    detail_ws.cell(row=total_row, column=24, value=f"{sum(float(detail_ws.cell(row=r, column=24).value) for r in range(2, row_num)):.2f}").font = Font(bold=True)
+    detail_ws.cell(row=total_row, column=3, value="SUMA CAŁKOWITA").font = Font(bold=True)
+    detail_ws.cell(row=total_row, column=25, value=f"{sum(cost_components.values()):.2f}").font = Font(bold=True)
     
     # Autofit columns
     for column in detail_ws.columns:
@@ -1194,207 +1331,269 @@ def generate_report():
         adjusted_width = min(max_length + 2, 30)
         detail_ws.column_dimensions[column_letter].width = adjusted_width
     
-    # Sheet 2: Summary (Synthetic form)
-    summary_ws = cost_wb.create_sheet("Podsumowanie")
+    # Set specific width for thumbnail column
+    detail_ws.column_dimensions['B'].width = 12
     
-    summary_headers = ["ID", "Nazwa", "Materiał", "Grubość", "Ilość", 
-                      "Koszt jednostkowy", "Gięcie (75%)", "Dodatkowe", 
-                      "Koszt całkowity"]
-    
-    for col, header in enumerate(summary_headers, 1):
-        cell = summary_ws.cell(row=1, column=col, value=header)
-        cell.font = Font(bold=True, color="FFFFFF")
-        cell.fill = PatternFill(start_color="366092", end_color="366092", fill_type="solid")
-    
-    summary_total = 0.0
-    for idx, part in enumerate(all_parts, 2):
-        unit_cost = part['base_cost_per_unit']
-        bending = part.get('bending_per_unit', 0.0) * 0.75
-        additional = part.get('additional_per_unit', 0.0)
-        total_unit = unit_cost + bending + additional
-        total_part = total_unit * part['qty']
-        summary_total += total_part
-        
-        summary_ws.append([
-            part['id'], part['name'], part['material'], part['thickness'], 
-            part['qty'], f"{unit_cost:.2f}", f"{bending:.2f}", 
-            f"{additional:.2f}", f"{total_part:.2f}"
-        ])
-    
-    summary_ws.append(["", "", "", "", "SUMA", "", "", "", f"{summary_total:.2f}"])
-    summary_ws.cell(row=summary_ws.max_row, column=5).font = Font(bold=True)
-    summary_ws.cell(row=summary_ws.max_row, column=9).font = Font(bold=True)
-    
-    # Sheet 3: Charts and Analysis
+    # Sheet 2: Charts and Analysis with corrected data
     chart_ws = cost_wb.create_sheet("Wykresy i Analiza")
     
-    # Financial summary data
+    # Title
     chart_ws['A1'] = "ANALIZA FINANSOWA ZLECENIA"
-    chart_ws['A1'].font = Font(bold=True, size=14)
+    chart_ws['A1'].font = Font(bold=True, size=16)
+    chart_ws.merge_cells('A1:C1')
     
+    # Cost breakdown table
     chart_ws['A3'] = "Składnik kosztów"
     chart_ws['B3'] = "Wartość [PLN]"
     chart_ws['C3'] = "Udział [%]"
     
-    total_costs = (material_costs + cutting_costs + contour_costs + marking_costs + 
-                  defilm_costs + operational_costs + technology_costs + 
-                  bending_costs + additional_costs)
+    for cell in ['A3', 'B3', 'C3']:
+        chart_ws[cell].font = Font(bold=True)
+        chart_ws[cell].fill = PatternFill(start_color="D9D9D9", end_color="D9D9D9", fill_type="solid")
     
-    cost_components = [
-        ("Materiał", material_costs),
-        ("Cięcie laserowe", cutting_costs),
-        ("Kontury", contour_costs),
-        ("Znakowanie", marking_costs),
-        ("Odfoliowanie", defilm_costs),
-        ("Koszty operacyjne", operational_costs),
-        ("Technologia", technology_costs),
-        ("Gięcie", bending_costs),
-        ("Koszty dodatkowe", additional_costs)
-    ]
-    
-    for idx, (name, value) in enumerate(cost_components, 4):
-        chart_ws.cell(row=idx, column=1, value=name)
-        chart_ws.cell(row=idx, column=2, value=f"{value:.2f}")
-        percentage = (value / total_costs * 100) if total_costs > 0 else 0
-        chart_ws.cell(row=idx, column=3, value=f"{percentage:.1f}%")
-    
-    # Total row
-    chart_ws.cell(row=13, column=1, value="RAZEM").font = Font(bold=True)
-    chart_ws.cell(row=13, column=2, value=f"{total_costs:.2f}").font = Font(bold=True)
-    chart_ws.cell(row=13, column=3, value="100.0%").font = Font(bold=True)
-    
-    # Pie Chart - Cost Distribution
-    pie = PieChart()
-    pie.title = "Rozkład kosztów zlecenia"
-    pie.width = 12
-    pie.height = 8
-    
-    data = Reference(chart_ws, min_col=2, min_row=3, max_row=12)
-    categories = Reference(chart_ws, min_col=1, min_row=4, max_row=12)
-    pie.add_data(data, titles_from_data=True)
-    pie.set_categories(categories)
-    pie.dataLabels = DataLabelList()
-    pie.dataLabels.showPercent = True
-    
-    chart_ws.add_chart(pie, "E3")
-    
-    # Bar Chart - Cost Components
-    bar = BarChart()
-    bar.title = "Składniki kosztów [PLN]"
-    bar.width = 14
-    bar.height = 8
-    bar.style = 10
-    bar.x_axis.title = "Składnik"
-    bar.y_axis.title = "Wartość [PLN]"
-    
-    bar_data = Reference(chart_ws, min_col=2, min_row=3, max_row=12)
-    bar_categories = Reference(chart_ws, min_col=1, min_row=4, max_row=12)
-    bar.add_data(bar_data, titles_from_data=True)
-    bar.set_categories(bar_categories)
-    
-    chart_ws.add_chart(bar, "E15")
-    
-    # Financial Result Summary
-    chart_ws['A28'] = "WYNIK FINANSOWY"
-    chart_ws['A28'].font = Font(bold=True, size=12)
-    
-    # Calculate the profit margin based on customer price vs base costs
-    client_total = total  # This is the price for the customer
-    margin = client_total - total_costs
-    margin_percent = (margin / total_costs * 100) if total_costs > 0 else 0
-    
-    chart_ws['A30'] = "Koszty całkowite:"
-    chart_ws['B30'] = f"{total_costs:.2f} PLN"
-    chart_ws['A31'] = "Cena dla klienta:"
-    chart_ws['B31'] = f"{client_total:.2f} PLN"
-    chart_ws['A32'] = "Marża:"
-    chart_ws['B32'] = f"{margin:.2f} PLN ({margin_percent:.1f}%)"
-    
-    # Color formatting for financial result
-    chart_ws['B32'].font = Font(bold=True, color="008000" if margin > 0 else "FF0000")
-    
-    # Sheet 4: Material usage statistics
-    material_ws = cost_wb.create_sheet("Statystyki materiałów")
-    
-    material_ws['A1'] = "WYKORZYSTANIE MATERIAŁÓW"
-    material_ws['A1'].font = Font(bold=True, size=12)
-    
-    # Group by material and thickness
-    material_groups = {}
-    for part in all_parts:
-        key = (part['material'], part['thickness'])
-        if key not in material_groups:
-            material_groups[key] = {
-                'weight': 0, 'cut_length': 0, 'parts': 0, 'cost': 0
-            }
-        material_groups[key]['weight'] += part['adj_weight'] * part['qty']
-        material_groups[key]['cut_length'] += part['cut_length'] * part['qty']
-        material_groups[key]['parts'] += part['qty']
-        material_groups[key]['cost'] += part['base_cost_per_unit'] * part['qty']
-    
-    material_ws['A3'] = "Materiał"
-    material_ws['B3'] = "Grubość [mm]"
-    material_ws['C3'] = "Waga [kg]"
-    material_ws['D3'] = "Długość cięcia [m]"
-    material_ws['E3'] = "Ilość części"
-    material_ws['F3'] = "Koszt [PLN]"
-    
-    for col in range(1, 7):
-        material_ws.cell(row=3, column=col).font = Font(bold=True)
-        material_ws.cell(row=3, column=col).fill = PatternFill(
-            start_color="D9D9D9", end_color="D9D9D9", fill_type="solid"
-        )
+    # Filter out zero-value components and calculate percentages
+    total_costs = sum(cost_components.values())
+    active_components = [(k, v) for k, v in cost_components.items() if v > 0]
     
     row = 4
-    for (material, thickness), stats in material_groups.items():
-        material_ws.cell(row=row, column=1, value=material)
-        material_ws.cell(row=row, column=2, value=thickness)
-        material_ws.cell(row=row, column=3, value=f"{stats['weight']:.2f}")
-        material_ws.cell(row=row, column=4, value=f"{stats['cut_length']:.2f}")
-        material_ws.cell(row=row, column=5, value=stats['parts'])
-        material_ws.cell(row=row, column=6, value=f"{stats['cost']:.2f}")
+    for name, value in active_components:
+        chart_ws.cell(row=row, column=1, value=name)
+        chart_ws.cell(row=row, column=2, value=round(value, 2))
+        percentage = (value / total_costs * 100) if total_costs > 0 else 0
+        chart_ws.cell(row=row, column=3, value=round(percentage, 1))
         row += 1
     
-    # Save the workbook
+    # Total row
+    chart_ws.cell(row=row, column=1, value="RAZEM").font = Font(bold=True)
+    chart_ws.cell(row=row, column=2, value=round(total_costs, 2)).font = Font(bold=True)
+    chart_ws.cell(row=row, column=3, value=100.0).font = Font(bold=True)
+    
+   # Pie Chart - Corrected with proper data reference
+    if len(active_components) > 0:
+        pie = PieChart()
+        pie.title = "Struktura kosztów (%)"
+        pie.width = 20
+        pie.height = 15
+    
+        # Data range (values)
+        data = Reference(chart_ws, min_col=3, min_row=4, max_row=3+len(active_components))
+        # Categories (labels)
+        categories = Reference(chart_ws, min_col=1, min_row=4, max_row=3+len(active_components))
+    
+        pie.add_data(data, titles_from_data=False)
+        pie.set_categories(categories)
+    
+        # Data labels showing percentages
+        pie.dataLabels = DataLabelList()
+        pie.dataLabels.showPercent = True
+        pie.dataLabels.showCatName = True
+        pie.dataLabels.showSerName = False  # This removes "Serie1" from labels
+        pie.dataLabels.showVal = False  # Don't show raw values
+        chart_ws.add_chart(pie, "E3")
+        
+    
+    # Financial Result Summary
+    chart_ws['A' + str(row + 3)] = "WYNIK FINANSOWY"
+    chart_ws['A' + str(row + 3)].font = Font(bold=True, size=12)
+    
+    client_price = total_price_per_order 
+    margin = client_price - total_costs
+    margin_percent = (margin / total_costs * 100) if total_costs > 0 else 0
+    
+    chart_ws['A' + str(row + 5)] = "Koszty całkowite:"
+    chart_ws['B' + str(row + 5)] = f"{total_costs:.2f} PLN"
+    chart_ws['A' + str(row + 6)] = "Cena dla klienta:"
+    chart_ws['B' + str(row + 6)] = f"{client_price:.2f} PLN"
+    chart_ws['A' + str(row + 7)] = "Marża:"
+    chart_ws['B' + str(row + 7)] = f"{margin:.2f} PLN ({margin_percent:.1f}%)"
+    chart_ws['B' + str(row + 7)].font = Font(bold=True, color="008000")
+    
+    # Save the cost report
     cost_wb.save(os.path.join(raporty_path, "Raport kosztów.xlsx"))
-
-    # Generate client report XLSX with thumbnails (keeping original functionality)
+    
+    # Generate enhanced client report with professional styling
     client_wb = Workbook()
     client_ws = client_wb.active
-    client_ws.title = "Koszty dla klienta"
-
-    client_ws.append(["ID", "Nazwa", "Materiał", "Grubość", "Ilość", "Koszt jednostkowy (z narzutami)", "Gięcie", "Dodatkowe", "Koszt całkowity", "Miniatura"])
-
+    client_ws.title = "Oferta dla klienta"
+    
+    # Add header with company info and logo space
+    client_ws.merge_cells('A1:I1')
+    client_ws['A1'] = "LP KONSTAL Sp. z o.o."
+    client_ws['A1'].font = Font(bold=True, size=16, color="366092")
+    client_ws['A1'].alignment = Alignment(horizontal="center", vertical="center")
+    
+    # Add offer details
+    client_ws.merge_cells('A3:D3')
+    client_ws['A3'] = f"OFERTA NR: {offer_number}"
+    client_ws['A3'].font = Font(bold=True, size=14)
+    
+    client_ws.merge_cells('F3:I3')
+    client_ws['F3'] = f"Data: {datetime.datetime.now().strftime('%d.%m.%Y')}"
+    client_ws['F3'].alignment = Alignment(horizontal="right")
+    
+    client_ws.merge_cells('A4:D4')
+    client_ws['A4'] = f"Dla: {customer_name}"
+    client_ws['A4'].font = Font(size=12)
+    
+    client_ws.merge_cells('F4:I4')
+    client_ws['F4'] = f"Ważne do: {validity}"
+    client_ws['F4'].alignment = Alignment(horizontal="right")
+    
+    # Add a separator row
+    client_ws.merge_cells('A6:I6')
+    client_ws['A6'].fill = PatternFill(start_color="366092", end_color="366092", fill_type="solid")
+    client_ws.row_dimensions[6].height = 3
+    
+    # Column headers for client report
+    headers = [
+        "ID", "Miniatura", "Nazwa części", "Materiał", 
+        "Grubość [mm]", "Waga jednostkowa [kg]", 
+        "Ilość [szt]", "Koszt jednostkowy [PLN]", "Koszt całkowity [PLN]"
+    ]
+    
+    header_row = 8
+    for col, header in enumerate(headers, 1):
+        cell = client_ws.cell(row=header_row, column=col, value=header)
+        cell.font = Font(bold=True, color="FFFFFF")
+        cell.fill = PatternFill(start_color="366092", end_color="366092", fill_type="solid")
+        cell.alignment = Alignment(horizontal="center", vertical="center", wrap_text=True)
+        cell.border = Border(
+            left=Side(style='thin'),
+            right=Side(style='thin'),
+            top=Side(style='thin'),
+            bottom=Side(style='thin')
+        )  # <- This closing parenthesis was missing
+    
+    # Add data rows with alternating colors
+    data_start_row = header_row + 1
     client_total = 0.0
-    row_num = 2  # Start from row 2
-    for part in all_parts:
-        unit_cost = part['cost_per_unit']
-        bending = part['bending_per_unit']
-        additional = part['additional_per_unit']
-        total_unit = unit_cost + bending + additional
-        total_part = total_unit * part['qty']
+    
+    for idx, part in enumerate(all_parts):
+        row_num = data_start_row + idx
+        
+        # Alternate row colors for better readability
+        fill_color = "F2F2F2" if idx % 2 == 0 else "FFFFFF"
+        
+        unit_total = part['cost_per_unit'] + part['bending_per_unit'] + part['additional_per_unit']
+        total_part = unit_total * part['qty']
         client_total += total_part
-
-        client_ws.append([part['id'], part['name'], part['material'], part['thickness'], part['qty'], unit_cost, bending, additional, total_part])
-
-        # Add thumbnail if available
-        if part['thumb_data']:
-            img = OpenpyxlImage(io.BytesIO(part['thumb_data']))
-            img.width = 60
-            img.height = 40
-            client_ws.add_image(img, 'J' + str(row_num))
-
-        # Log
-        with open(log_path, 'a', encoding='utf-8') as log:
-            log.write(f"{part['name']}: Jednostkowy (z narzutami) {unit_cost}, Gięcie {bending}, Dodatkowe {additional}, Całkowity {total_part}\n")
-
-        row_num += 1
-
-    client_ws.append(["", "", "", "", "Suma", client_total])
-
+        
+        # ID
+        cell = client_ws.cell(row=row_num, column=1, value=part['id'])
+        cell.fill = PatternFill(start_color=fill_color, end_color=fill_color, fill_type="solid")
+        cell.alignment = Alignment(horizontal="center")
+        cell.border = Border(left=Side(style='thin'), right=Side(style='thin'))
+        
+        # Miniatura (column 2)
+        cell = client_ws.cell(row=row_num, column=2, value='')
+        cell.fill = PatternFill(start_color=fill_color, end_color=fill_color, fill_type="solid")
+        if part.get('thumb_data'):
+            try:
+                img = OpenpyxlImage(io.BytesIO(part['thumb_data']))
+                img.width = 50
+                img.height = 35
+                client_ws.add_image(img, f'B{row_num}')
+                client_ws.row_dimensions[row_num].height = 40
+            except:
+                pass
+        
+        # Other columns
+        values = [
+            part['name'],
+            part['material'],
+            part['thickness'],
+            f"{part.get('raw_weight', 0.0):.3f}",
+            part['qty'],
+            f"{unit_total:.2f}",
+            f"{total_part:.2f}"
+        ]
+        
+        for col, value in enumerate(values, 3):
+            cell = client_ws.cell(row=row_num, column=col, value=value)
+            cell.fill = PatternFill(start_color=fill_color, end_color=fill_color, fill_type="solid")
+            if col in [5, 6, 8, 9]:  # Numeric columns
+                cell.alignment = Alignment(horizontal="right")
+            cell.border = Border(left=Side(style='thin'), right=Side(style='thin'))
+    
+    # Total row
+    total_row = data_start_row + len(all_parts)
+    client_ws.merge_cells(f'A{total_row}:F{total_row}')
+    cell = client_ws.cell(row=total_row, column=1, value="RAZEM")
+    cell.font = Font(bold=True, size=12)
+    cell.fill = PatternFill(start_color="D9D9D9", end_color="D9D9D9", fill_type="solid")
+    cell.alignment = Alignment(horizontal="right")
+    
+    for col in range(7, 9):
+        cell = client_ws.cell(row=total_row, column=col, value="")
+        cell.fill = PatternFill(start_color="D9D9D9", end_color="D9D9D9", fill_type="solid")
+    
+    cell = client_ws.cell(row=total_row, column=9, value=f"{client_total:.2f}")
+    cell.font = Font(bold=True, size=12)
+    cell.fill = PatternFill(start_color="D9D9D9", end_color="D9D9D9", fill_type="solid")
+    cell.alignment = Alignment(horizontal="right")
+    cell.border = Border(top=Side(style='double'), bottom=Side(style='double'))
+    
+    # Add closing text with disclaimers
+    disclaimer_start = total_row + 3
+    client_ws.merge_cells(f'A{disclaimer_start}:I{disclaimer_start}')
+    client_ws[f'A{disclaimer_start}'] = "WARUNKI REALIZACJI"
+    client_ws[f'A{disclaimer_start}'].font = Font(bold=True, size=11)
+    
+    disclaimers = [
+        "1. Realizacja zlecenia następuje po akceptacji oferty i przesłaniu dokumentacji technicznej.",
+        "2. Termin realizacji: do uzgodnienia, standardowo 5-7 dni roboczych.",
+        "3. Ceny nie zawierają kosztów transportu.",
+        "4. Wyłączenia odpowiedzialności:",
+        "   • Za błędy w dostarczonej dokumentacji technicznej",
+        "   • Za wady materiału powierzonego",
+        "   • Za szkody wynikające z siły wyższej",
+        "5. Płatność: przelew 14 dni od daty wystawienia faktury VAT."
+    ]
+    
+    for idx, text in enumerate(disclaimers):
+        row = disclaimer_start + idx + 1
+        client_ws.merge_cells(f'A{row}:I{row}')
+        client_ws[f'A{row}'] = text
+        client_ws[f'A{row}'].font = Font(size=9)
+        client_ws[f'A{row}'].alignment = Alignment(wrap_text=True)
+    
+    # Footer with contact info
+    footer_row = disclaimer_start + len(disclaimers) + 3
+    client_ws.merge_cells(f'A{footer_row}:I{footer_row}')
+    client_ws[f'A{footer_row}'] = "Laser Team | Tel: +48 537 883 393 | Email: laser@konstal.com"
+    client_ws[f'A{footer_row}'].font = Font(size=10, italic=True)
+    client_ws[f'A{footer_row}'].alignment = Alignment(horizontal="center")
+    
+    # Set column widths
+    column_widths = {
+        'A': 8,   # ID
+        'B': 12,  # Miniatura
+        'C': 35,  # Nazwa części
+        'D': 15,  # Materiał
+        'E': 12,  # Grubość
+        'F': 18,  # Waga
+        'G': 10,  # Ilość
+        'H': 18,  # Koszt jednostkowy
+        'I': 18   # Koszt całkowity
+    }
+    
+    for col, width in column_widths.items():
+        client_ws.column_dimensions[col].width = width
+    
+    # Add print settings
+    client_ws.page_setup.orientation = 'landscape'
+    client_ws.page_setup.fitToWidth = 1
+    client_ws.page_setup.fitToHeight = 0
+    
+    # Save the client report
     client_wb.save(os.path.join(raporty_path, "Raport dla klienta.xlsx"))
-
+    
+    # Generate DOCX (keep existing code for Word document)
+    # ... [existing DOCX generation code] ...
+    
     messagebox.showinfo("Sukces", "Raporty wygenerowane w folderze Raporty.")
+    
+
 
 # przyciski lewe
 ttk.Button(buttons_frame, text="Analizuj XLSX", command=analyze_xlsx_folder).pack(side="left", padx=5)
