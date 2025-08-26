@@ -272,88 +272,99 @@ def edit_cell(event):
 tree.bind("<Double-1>", edit_cell)
 panel_a.add(subpanel1, minsize=220)
 
-# --- PANEL 2 --- (Replace the existing Panel 2 section starting around line 258)
+# --- PANEL 2 ---
 subpanel2 = tk.LabelFrame(panel_a, text="PANEL 2 – STAŁE KOSZTY I KALKULACJA", bg="#2c2c2c", fg="white")
 
-# Existing fixed costs
-ttk.Label(subpanel2, text="Koszty operacyjne za arkusz:").grid(row=0, column=0, sticky="w")
+# Left column - Fixed costs
+ttk.Label(subpanel2, text="Koszty operacyjne za arkusz:").grid(row=0, column=0, sticky="w", padx=(5,10))
 op_cost_entry = ttk.Entry(subpanel2)
-op_cost_entry.grid(row=0, column=1)
+op_cost_entry.grid(row=0, column=1, padx=(0,20))
 op_cost_entry.insert(tk.INSERT, "40,00")
 
-ttk.Label(subpanel2, text="Technologia za zlecenie:").grid(row=1, column=0, sticky="w")
+ttk.Label(subpanel2, text="Technologia za zlecenie:").grid(row=1, column=0, sticky="w", padx=(5,10))
 tech_order_entry = ttk.Entry(subpanel2)
-tech_order_entry.grid(row=1, column=1)
+tech_order_entry.grid(row=1, column=1, padx=(0,20))
 tech_order_entry.insert(tk.INSERT, "50,00")
 
-ttk.Label(subpanel2, text="Dodatkowe koszty dla zlecenia:").grid(row=2, column=0, sticky="w")
+ttk.Label(subpanel2, text="Dodatkowe koszty dla zlecenia:").grid(row=2, column=0, sticky="w", padx=(5,10))
 add_order_cost_entry = ttk.Entry(subpanel2)
-add_order_cost_entry.grid(row=2, column=1)
+add_order_cost_entry.grid(row=2, column=1, padx=(0,20))
 add_order_cost_entry.insert(tk.INSERT, "0,00")
 
-# New cutting time cost fields
-ttk.Label(subpanel2, text="").grid(row=0, column=2, pady=10)  # Separator
-ttk.Label(subpanel2, text="KALKULACJA CZASU CIĘCIA", font=("Arial", 10, "bold")).grid(row=4, column=0, columnspan=2, pady=(10, 5))
+# Right column - Cutting time calculation header
+ttk.Label(subpanel2, text="KALKULACJA CZASU CIĘCIA", font=("Arial", 10, "bold")).grid(row=0, column=2, columnspan=2, pady=(0, 5), padx=(20,5))
 
-ttk.Label(subpanel2, text="Stawka cięcia O₂ [PLN/h]:").grid(row=5, column=2, sticky="w")
+ttk.Label(subpanel2, text="Stawka cięcia O₂ [PLN/h]:").grid(row=1, column=2, sticky="w", padx=(20,10))
 oxygen_rate_entry = ttk.Entry(subpanel2)
-oxygen_rate_entry.grid(row=5, column=3)
-oxygen_rate_entry.insert(tk.INSERT, "350,00")  # Default value
+oxygen_rate_entry.grid(row=1, column=3, padx=(0,5))
+oxygen_rate_entry.insert(tk.INSERT, "300,00")
 
-ttk.Label(subpanel2, text="Stawka cięcia N₂ [PLN/h]:").grid(row=6, column=2, sticky="w")
+ttk.Label(subpanel2, text="Stawka cięcia N₂ [PLN/h]:").grid(row=2, column=2, sticky="w", padx=(20,10))
 nitrogen_rate_entry = ttk.Entry(subpanel2)
-nitrogen_rate_entry.grid(row=6, column=1)
-nitrogen_rate_entry.insert(tk.INSERT, "550,00")  # Default value
+nitrogen_rate_entry.grid(row=2, column=3, padx=(0,5))
+nitrogen_rate_entry.insert(tk.INSERT, "350,00")
 
-# Display fields for calculated values
-ttk.Label(subpanel2, text="").grid(row=7, column=0, pady=5)  # Separator
-ttk.Label(subpanel2, text="Czas cięcia O₂ [h]:").grid(row=8, column=0, sticky="w")
+# Separator
+ttk.Label(subpanel2, text="").grid(row=3, column=0, columnspan=4, pady=5)
+
+# Time and cost displays - spanning both column groups
+ttk.Label(subpanel2, text="Czas cięcia O₂ [h]:").grid(row=4, column=0, sticky="w", padx=(5,10))
 oxygen_time_label = ttk.Label(subpanel2, text="0,00", relief="sunken", anchor="e", width=20)
-oxygen_time_label.grid(row=8, column=1, sticky="ew")
+oxygen_time_label.grid(row=4, column=1, sticky="ew", padx=(0,20))
 
-ttk.Label(subpanel2, text="Czas cięcia N₂ [h]:").grid(row=9, column=0, sticky="w")
+ttk.Label(subpanel2, text="Czas cięcia N₂ [h]:").grid(row=4, column=2, sticky="w", padx=(20,10))
 nitrogen_time_label = ttk.Label(subpanel2, text="0,00", relief="sunken", anchor="e", width=20)
-nitrogen_time_label.grid(row=9, column=1, sticky="ew")
+nitrogen_time_label.grid(row=4, column=3, sticky="ew", padx=(0,5))
 
-ttk.Label(subpanel2, text="Koszt cięcia O₂ [PLN]:").grid(row=10, column=0, sticky="w")
+ttk.Label(subpanel2, text="Koszt cięcia O₂ [PLN]:").grid(row=5, column=0, sticky="w", padx=(5,10))
 oxygen_cost_label = ttk.Label(subpanel2, text="0,00", relief="sunken", anchor="e", width=20)
-oxygen_cost_label.grid(row=10, column=1, sticky="ew")
+oxygen_cost_label.grid(row=5, column=1, sticky="ew", padx=(0,20))
 
-ttk.Label(subpanel2, text="Koszt cięcia N₂ [PLN]:").grid(row=11, column=0, sticky="w")
+ttk.Label(subpanel2, text="Koszt cięcia N₂ [PLN]:").grid(row=5, column=2, sticky="w", padx=(20,10))
 nitrogen_cost_label = ttk.Label(subpanel2, text="0,00", relief="sunken", anchor="e", width=20)
-nitrogen_cost_label.grid(row=11, column=1, sticky="ew")
+nitrogen_cost_label.grid(row=5, column=3, sticky="ew", padx=(0,5))
 
-ttk.Label(subpanel2, text="").grid(row=12, column=0, pady=5)  # Separator
-ttk.Label(subpanel2, text="PODSUMOWANIE KOSZTÓW", font=("Arial", 10, "bold")).grid(row=13, column=0, columnspan=2, pady=(10, 5))
+# Separator
+ttk.Label(subpanel2, text="").grid(row=6, column=0, columnspan=4, pady=5)
 
-ttk.Label(subpanel2, text="Koszt materiału [PLN]:").grid(row=14, column=0, sticky="w")
+# Summary section header
+ttk.Label(subpanel2, text="PODSUMOWANIE KOSZTÓW", font=("Arial", 10, "bold")).grid(row=7, column=0, columnspan=4, pady=(5, 5))
+
+# Summary fields - arranged in two columns
+ttk.Label(subpanel2, text="Koszt materiału [PLN]:").grid(row=8, column=0, sticky="w", padx=(5,10))
 material_cost_label = ttk.Label(subpanel2, text="0,00", relief="sunken", anchor="e", width=20)
-material_cost_label.grid(row=14, column=1, sticky="ew")
+material_cost_label.grid(row=8, column=1, sticky="ew", padx=(0,20))
 
-ttk.Label(subpanel2, text="Koszt cięcia łącznie [PLN]:").grid(row=15, column=0, sticky="w")
+ttk.Label(subpanel2, text="Koszt cięcia łącznie [PLN]:").grid(row=8, column=2, sticky="w", padx=(20,10))
 total_cutting_cost_label = ttk.Label(subpanel2, text="0,00", relief="sunken", anchor="e", width=20)
-total_cutting_cost_label.grid(row=15, column=1, sticky="ew")
+total_cutting_cost_label.grid(row=8, column=3, sticky="ew", padx=(0,5))
 
-ttk.Label(subpanel2, text="Koszty operacyjne [PLN]:").grid(row=16, column=0, sticky="w")
+ttk.Label(subpanel2, text="Koszty operacyjne [PLN]:").grid(row=9, column=0, sticky="w", padx=(5,10))
 operational_cost_label = ttk.Label(subpanel2, text="0,00", relief="sunken", anchor="e", width=20)
-operational_cost_label.grid(row=16, column=1, sticky="ew")
+operational_cost_label.grid(row=9, column=1, sticky="ew", padx=(0,20))
 
-ttk.Label(subpanel2, text="").grid(row=17, column=0, pady=5)  # Separator
-ttk.Label(subpanel2, text="SUMA WSZYSTKICH KOSZTÓW [PLN]:").grid(row=18, column=0, sticky="w")
-total_all_costs_label = ttk.Label(subpanel2, text="0,00", relief="sunken", anchor="e", width=20, font=("Arial", 11, "bold"))
-total_all_costs_label.grid(row=18, column=1, sticky="ew")
+# Separator before total
+ttk.Label(subpanel2, text="").grid(row=10, column=0, columnspan=4, pady=5)
+
+# Total sum - spanning columns for emphasis
+ttk.Label(subpanel2, text="SUMA WSZYSTKICH KOSZTÓW [PLN]:").grid(row=11, column=0, columnspan=2, sticky="w", padx=(5,10))
+total_all_costs_label = ttk.Label(subpanel2, text="0,00", relief="sunken", anchor="e", width=30, font=("Arial", 11, "bold"))
+total_all_costs_label.grid(row=11, column=2, columnspan=2, sticky="ew", padx=(20,5))
+
+# Configure column weights for proper resizing
+subpanel2.grid_columnconfigure(1, weight=1)
+subpanel2.grid_columnconfigure(3, weight=1)
 
 subpanel2.update_idletasks()
 panel2_height = subpanel2.winfo_reqheight() + 20
 panel_a.add(subpanel2, height=panel2_height, minsize=panel2_height)
 
-# Add these after creating the entry fields in Panel 2:
+# Add event handlers for automatic recalculation
 oxygen_rate_entry.bind('<FocusOut>', lambda e: update_cost_calculations() if all_parts else None)
 nitrogen_rate_entry.bind('<FocusOut>', lambda e: update_cost_calculations() if all_parts else None)
 op_cost_entry.bind('<FocusOut>', lambda e: update_cost_calculations() if all_parts else None)
 tech_order_entry.bind('<FocusOut>', lambda e: update_cost_calculations() if all_parts else None)
 add_order_cost_entry.bind('<FocusOut>', lambda e: update_cost_calculations() if all_parts else None)
-
 # --- PANEL 3 ---
 subpanel3 = tk.LabelFrame(panel_a, text="PANEL 3 — CENNIKI I TESTY", bg="#2c2c2c", fg="white", padx=6, pady=6)
 
@@ -1336,11 +1347,11 @@ def generate_report():
     
     # Sheet 2: Charts and Analysis with corrected data
     chart_ws = cost_wb.create_sheet("Wykresy i Analiza")
-    
+
     # Title
     chart_ws['A1'] = "ANALIZA FINANSOWA ZLECENIA"
     chart_ws['A1'].font = Font(bold=True, size=16)
-    chart_ws.merge_cells('A1:C1')
+    chart_ws.merge_cells('A1:D1')
     
     # Cost breakdown table
     chart_ws['A3'] = "Składnik kosztów"
@@ -1368,7 +1379,34 @@ def generate_report():
     chart_ws.cell(row=row, column=2, value=round(total_costs, 2)).font = Font(bold=True)
     chart_ws.cell(row=row, column=3, value=100.0).font = Font(bold=True)
     
-   # Pie Chart - Corrected with proper data reference
+
+    # Autofit columns for "Wykresy i Analiza" sheet
+    for column_cells in chart_ws.columns:
+        max_length = 0
+        column_letter = None
+    
+        for cell in column_cells:
+            # Skip merged cells and get column letter from first regular cell
+            if hasattr(cell, 'column_letter'):
+                if column_letter is None:
+                    column_letter = cell.column_letter
+                try:
+                    if cell.value:
+                        max_length = max(max_length, len(str(cell.value)))
+                except:
+                    pass
+    
+        # Only set width if we found a valid column letter
+        if column_letter:
+            adjusted_width = min(max_length + 2, 40)  # Cap at 40 to avoid overly wide columns
+            chart_ws.column_dimensions[column_letter].width = adjusted_width
+
+    # Set minimum widths for specific columns
+    chart_ws.column_dimensions['A'].width = max(chart_ws.column_dimensions['A'].width, 20)  # Component names
+    chart_ws.column_dimensions['B'].width = max(chart_ws.column_dimensions['B'].width, 15)  # Values
+    chart_ws.column_dimensions['C'].width = max(chart_ws.column_dimensions['C'].width, 12)  # Percentages
+
+    # Pie Chart - Corrected with proper data reference
     if len(active_components) > 0:
         pie = PieChart()
         pie.title = "Struktura kosztów (%)"
