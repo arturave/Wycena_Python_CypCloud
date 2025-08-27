@@ -351,6 +351,22 @@ ttk.Label(subpanel2, text="SUMA WSZYSTKICH KOSZTÓW [PLN]:").grid(row=11, column
 total_all_costs_label = ttk.Label(subpanel2, text="0,00", relief="sunken", anchor="e", width=30, font=("Arial", 11, "bold"))
 total_all_costs_label.grid(row=11, column=2, columnspan=2, sticky="ew", padx=(20,5))
 
+# Modify PANEL 2 section - add these elements after the total_all_costs_label (around row 11-12):
+
+# Make total costs editable with new label
+ttk.Label(subpanel2, text="SUMA DO KOREKTY [PLN]:").grid(row=13, column=0, columnspan=2, sticky="w", padx=(5,10))
+total_all_costs_entry = ttk.Entry(subpanel2, width=30, font=("Arial", 11, "bold"))
+total_all_costs_entry.grid(row=13, column=2, columnspan=2, sticky="ew", padx=(20,5))
+total_all_costs_entry.insert(tk.INSERT, "0,00")
+
+# Add update button
+update_prices_button = ttk.Button(subpanel2, text="UAKTUALNIJ CENY NA BAZIE CZASU", 
+                                  command=lambda: update_prices_based_on_time())
+update_prices_button.grid(row=14, column=0, columnspan=4, pady=(10, 5))
+
+# Add event handlers with Enter key support
+total_all_costs_entry.bind('<FocusOut>', lambda e: validate_total_entry() if all_parts else None)
+
 # Configure column weights for proper resizing
 subpanel2.grid_columnconfigure(1, weight=1)
 subpanel2.grid_columnconfigure(3, weight=1)
@@ -402,6 +418,160 @@ subpanel3.grid_columnconfigure(0, weight=1); subpanel3.grid_columnconfigure(1, w
 
 panel_a.add(subpanel3, minsize=200)
 right_paned.add(panel_a)
+
+def update_cost_calculations():
+    """Update all cost calculation displays in Panel 2"""
+    global oxygen_cutting_time, nitrogen_cutting_time, total_material_cost
+    
+    # Get rates from entries
+    oxygen_rate = _parse_float(oxygen_rate_entry.get()) or 0.0
+    nitrogen_rate = _parse_float(nitrogen_rate_entry.get()) or 0.0
+    op_cost_per_sheet = _parse_float(op_cost_entry.get()) or 0.0
+    tech_per_order = _parse_float(tech_order_entry.get()) or 0.0
+    add_costs_order = _parse_float(add_order_cost_entry.get()) or 0.0
+    
+    # Calculate cutting costs
+    oxygen_cost = oxygen_cutting_time * oxygen_rate
+    nitrogen_cost = nitrogen_cutting_time * nitrogen_rate
+    total_cutting_cost = oxygen_cost + nitrogen_cost
+    
+    # Calculate operational costs
+    operational_costs = (total_sheets * op_cost_per_sheet) + tech_per_order + add_costs_order
+    
+    # Calculate base total
+    base_total = total_material_cost + total_cutting_cost + operational_costs
+    
+    # Update display labels
+    oxygen_time_label.config(text=f"{oxygen_cutting_time:.2f}".replace('.', ','))
+    nitrogen_time_label.config(text=f"{nitrogen_cutting_time:.2f}".replace('.', ','))
+    oxygen_cost_label.config(text=format_pln(oxygen_cost))
+    nitrogen_cost_label.config(text=format_pln(nitrogen_cost))
+    material_cost_label.config(text=format_pln(total_material_cost))
+    total_cutting_cost_label.config(text=format_pln(total_cutting_cost))
+    operational_cost_label.config(text=format_pln(operational_costs))
+    
+    # Update the editable total field
+    total_all_costs_entry.delete(0, tk.END)
+    
+def validate_total_entry():
+    """Validate and format the manually entered total"""
+    try:
+        # Pobierz tekst z pola wejściowego
+        value_str = total_all_costs_entry.get().strip()
+        
+        # Usuń spacje i zamień przecinki na kropki jako separator dziesiętny
+        value_str = value_str.replace(' ', '').replace(',', '.')
+        
+        # Usuń wszystko poza cyframi i kropką, aby uniknąć błędów z innymi znakami
+        value_str = ''.join(c for c in value_str if c.isdigit() or c == '.')
+        
+        # Zamień na float, jeśli ciąg nie jest pusty
+        if value_str:
+            value = float(value_str)
+            if value is not None:
+                total_all_costs_entry.delete(0, tk.END)
+                total_all_costs_entry.insert(0, format_pln(value))
+    except ValueError:
+        pass  # Ignoruj błędy, jeśli konwersja się nie uda
+
+def update_prices_based_on_time():
+    """Update unit prices in treeview based on time calculations and proportional distribution"""
+    global all_parts, total_row_iid
+    
+    if not all_parts:
+        messagebox.showwarning("Uwaga", "Brak danych do aktualizacji. Najpierw wykonaj analizę.")
+        return
+    
+    # Get the target total from the editable field
+    value_str = total_all_costs_entry.get().strip()
+    value_str = value_str.replace(' ', '').replace(',', '.')  # Usuń spacje i zamień przecinki na kropki
+    value_str = ''.join(c for c in value_str if c.isdigit() or c == '.')  # Zachowaj tylko cyfry i kropki
+    target_total = _parse_float(value_str) if value_str else None
+    if not target_total or target_total <= 0:
+        messagebox.showerror("Błąd", "Nieprawidłowa suma kosztów.")
+        return
+    
+    # Calculate current total from treeview (excluding total row)
+    current_total = 0.0
+    items_data = []
+    
+    for item in tree.get_children():
+        if item == total_row_iid:
+            continue
+        vals = tree.item(item, 'values')
+        qty = _parse_float(vals[5]) or 0
+        cost = _parse_float(vals[6]) or 0
+        bending = _parse_float(vals[7]) or 0
+        additional = _parse_float(vals[8]) or 0
+        
+        item_total = (cost + bending + additional) * qty
+        current_total += item_total
+        
+        items_data.append({
+            'item': item,
+            'qty': qty,
+            'cost': cost,
+            'bending': bending,
+            'additional': additional,
+            'item_total': item_total,
+            'proportion': 0.0
+        })
+    
+    if current_total <= 0:
+        messagebox.showerror("Błąd", "Brak kosztów do przeliczenia.")
+        return
+    
+    # Calculate proportions for each item
+    for item_data in items_data:
+        item_data['proportion'] = item_data['item_total'] / current_total
+    
+    # Apply proportional distribution of the new total
+    new_grand_total = 0.0
+    for idx, item_data in enumerate(items_data):
+        # Calculate new item total based on proportion
+        new_item_total = target_total * item_data['proportion']
+        
+        # Calculate new unit cost (preserving bending and additional costs)
+        if item_data['qty'] > 0:
+            new_unit_cost = (new_item_total / item_data['qty']) - item_data['bending'] - item_data['additional']
+            
+            # Ensure non-negative cost
+            new_unit_cost = max(0, new_unit_cost)
+            
+            # Update tree item
+            vals = list(tree.item(item_data['item'], 'values'))
+            vals[6] = format_pln(new_unit_cost)
+            tree.item(item_data['item'], values=vals)
+            
+            # Update all_parts array
+            if idx < len(all_parts):
+                all_parts[idx]['cost_per_unit'] = new_unit_cost
+            
+            new_grand_total += (new_unit_cost + item_data['bending'] + item_data['additional']) * item_data['qty']
+    
+    # Update the total row
+    tree.set(total_row_iid, column="7", value=format_pln(new_grand_total))
+    SetTotalPricePerOrder(new_grand_total)
+    
+    messagebox.showinfo("Sukces", f"Ceny zostały zaktualizowane proporcjonalnie.\n"
+                                  f"Stara suma: {format_pln(current_total)}\n"
+                                  f"Nowa suma: {format_pln(new_grand_total)}")
+
+def update_total():
+    """Recalculate total after manual edits in treeview"""
+    global total_row_iid
+    total = 0.0
+    for item in tree.get_children():
+        if item == total_row_iid:
+            continue
+        vals = tree.item(item, 'values')
+        qty = _parse_float(vals[5]) or 0
+        cost = _parse_float(vals[6]) or 0
+        bending = _parse_float(vals[7]) or 0
+        additional = _parse_float(vals[8]) or 0
+        total += (cost + bending + additional) * qty
+    tree.set(total_row_iid, column="7", value=format_pln(total))
+    SetTotalPricePerOrder(total)
 
 # ---- Loader'y cenników ----
 def _tree_preview_clear_and_headers(headers):
@@ -712,7 +882,7 @@ thumbnail_imgs = []
 
 def analyze_xlsx_folder():
     global all_parts, last_groups, last_total_cost, last_folder_path, total_sheets, total_parts_qty, total_row_iid
-    global oxygen_cutting_time, nitrogen_cutting_time, total_material_cost  # Add these globals
+    global oxygen_cutting_time, nitrogen_cutting_time, total_material_cost
     
     # Initialize cutting time accumulators
     oxygen_cutting_time = 0.0
@@ -949,7 +1119,7 @@ def analyze_xlsx_folder():
         p['cost_per_unit'] = float(f"{p['cost_per_unit']:.2f}")
         p['base_cost_per_unit'] = float(f"{p['base_cost_per_unit']:.2f}")
 
-    # Calculate material costs for all parts
+   # Calculate material costs for all parts
     for p in all_parts:
         material_cost_per_part = p['adj_weight'] * p.get('base_price_per_kg', 0.0)
         total_material_cost += material_cost_per_part * p['qty']
@@ -996,6 +1166,7 @@ def analyze_xlsx_folder():
     SetTotalPricePerOrder(total_order)
     total_row_iid = tree.insert('', 'end', values=('', '', 'Razem', '', '', '', format_pln(total_order), '', '', '', ''))
 
+   # Create merged groups (this code should already exist in your function)
     total_sum = 0.0
     merged_groups = []
     for (mat_name, thk, parts) in groups:
@@ -1005,10 +1176,12 @@ def analyze_xlsx_folder():
             adj.append((nm, c, qty))
             total_sum += c * qty
         merged_groups.append((mat_name, thk, adj))
-
+    
+    # NOW you can safely assign these variables
     last_groups = merged_groups
     last_total_cost = total_sum
     last_folder_path = folder_path
+    
     messagebox.showinfo("Analiza", "Analiza plików XLSX zakończona. Dane w Panelu 1 uzupełnione.")
 
 def update_total():
