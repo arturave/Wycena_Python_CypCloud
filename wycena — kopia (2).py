@@ -929,7 +929,12 @@ def analyze_xlsx_folder():
 
             base_price_per_kg = material_prices.get((mat_norm, thk_val), 0.0)
             base_rate_per_cut_length = cutting_prices.get((thk_val, mat_norm, gas_key), 0.0)
-
+            if base_rate_per_cut_length == 0.0:
+                messagebox.showwarning("Cutting cost not found",f"{mat_norm} {thk_val}" )
+                return 0.0
+            if base_price_per_kg == 0.0:
+                messagebox.showwarning("Material not found", f"{mat_norm} {thk_val}")
+                return 0.0
             price_per_kg, rate_per_cut_length = apply_dynamic_pricing(
                 base_price_per_kg, base_rate_per_cut_length, thk_val, total_cut_length, cut_time
             )

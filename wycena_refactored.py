@@ -25,7 +25,6 @@ from openpyxl import load_workbook
 from openpyxl import Workbook
 from openpyxl.drawing.image import Image as OpenpyxlImage
 from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
-from openpyxl.chart import PieChart, Reference
 from openpyxl.chart.label import DataLabelList
 from docx import Document
 from docx.shared import Inches, RGBColor, Pt, Cm
@@ -105,8 +104,6 @@ last_total_cost = 0.0
 last_folder_path = ""
 total_sheets = 0
 total_parts_qty = 0
-is_manual = False
-sheet_data = []
 
 # ---- GUI ----
 root = tk.Tk()
@@ -352,6 +349,8 @@ ttk.Label(subpanel2, text="TOTAL OF ALL COSTS [PLN]:").grid(row=11, column=0, co
 total_all_costs_label = ttk.Label(subpanel2, text="0,00", relief="sunken", anchor="e", width=30, font=("Arial", 11, "bold"))
 total_all_costs_label.grid(row=11, column=2, columnspan=2, sticky="ew", padx=(20,5))
 
+# Modify PANEL 2 section - add these elements after the total_all_costs_label (around row 11-12):
+
 # Make total costs editable with new label
 ttk.Label(subpanel2, text="TOTAL FOR CORRECTION [PLN]:").grid(row=13, column=0, columnspan=2, sticky="w", padx=(5,10))
 total_all_costs_entry = ttk.Entry(subpanel2, width=30, font=("Arial", 11, "bold"))
@@ -418,12 +417,65 @@ subpanel3.grid_columnconfigure(0, weight=1); subpanel3.grid_columnconfigure(1, w
 panel_a.add(subpanel3, minsize=200)
 right_paned.add(panel_a)
 
+def update_cost_calculations():
+    """Update all cost calculation displays in Panel 2"""
+    global oxygen_cutting_time, nitrogen_cutting_time, total_material_cost
+    
+    # Get rates from entries
+    oxygen_rate = _parse_float(oxygen_rate_entry.get()) or 0.0
+    nitrogen_rate = _parse_float(nitrogen_rate_entry.get()) or 0.0
+    op_cost_per_sheet = _parse_float(op_cost_entry.get()) or 0.0
+    tech_per_order = _parse_float(tech_order_entry.get()) or 0.0
+    add_costs_order = _parse_float(add_order_cost_entry.get()) or 0.0
+    
+    # Calculate cutting costs
+    oxygen_cost = oxygen_cutting_time * oxygen_rate
+    nitrogen_cost = nitrogen_cutting_time * nitrogen_rate
+    total_cutting_cost = oxygen_cost + nitrogen_cost
+    
+    # Calculate operational costs
+    operational_costs = (total_sheets * op_cost_per_sheet) + tech_per_order + add_costs_order
+    
+    # Calculate base total
+    base_total = total_material_cost + total_cutting_cost + operational_costs
+    
+    # Update display labels
+    oxygen_time_label.config(text=f"{oxygen_cutting_time:.2f}".replace('.', ','))
+    nitrogen_time_label.config(text=f"{nitrogen_cutting_time:.2f}".replace('.', ','))
+    oxygen_cost_label.config(text=format_pln(oxygen_cost))
+    nitrogen_cost_label.config(text=format_pln(nitrogen_cost))
+    material_cost_label.config(text=format_pln(total_material_cost))
+    total_cutting_cost_label.config(text=format_pln(total_cutting_cost))
+    operational_cost_label.config(text=format_pln(operational_costs))
+    
+    # Update the editable total field
+    total_all_costs_entry.delete(0, tk.END)
+    
+def validate_total_entry():
+    """Validate and format the manually entered total"""
+    try:
+        # Get text from the input field
+        value_str = total_all_costs_entry.get().strip()
+        
+        # Remove spaces and replace commas with dots as decimal separator
+        value_str = value_str.replace(' ', '').replace(',', '.')
+        
+        # Remove everything except digits and dot to avoid errors with other characters
+        value_str = ''.join(c for c in value_str if c.isdigit() or c == '.')
+        
+        # Convert to float if the string is not empty
+        if value_str:
+            value = float(value_str)
+            if value is not None:
+                total_all_costs_entry.delete(0, tk.END)
+                total_all_costs_entry.insert(0, format_pln(value))
+    except ValueError:
+        pass  # Ignore errors if conversion fails
+
 def update_prices_based_on_time():
     """Update unit prices in treeview based on time calculations and proportional distribution"""
-    global all_parts, total_row_iid, is_manual
+    global all_parts, total_row_iid
     
-    is_manual = True
-
     if not all_parts:
         messagebox.showwarning("Warning", "No data to update. Perform analysis first.")
         return
@@ -503,26 +555,21 @@ def update_prices_based_on_time():
                                   f"Old sum: {format_pln(current_total)}\n"
                                   f"New sum: {format_pln(new_grand_total)}")
 
-def validate_total_entry():
-    """Validate and format the manually entered total"""
-    try:
-        # Get text from the input field
-        value_str = total_all_costs_entry.get().strip()
-        
-        # Remove spaces and replace commas with dots as decimal separator
-        value_str = value_str.replace(' ', '').replace(',', '.')
-        
-        # Remove everything except digits and dot to avoid errors with other characters
-        value_str = ''.join(c for c in value_str if c.isdigit() or c == '.')
-        
-        # Convert to float if the string is not empty
-        if value_str:
-            value = float(value_str)
-            if value is not None:
-                total_all_costs_entry.delete(0, tk.END)
-                total_all_costs_entry.insert(0, format_pln(value))
-    except ValueError:
-        pass  # Ignore errors if conversion fails
+def update_total():
+    """Recalculate total after manual edits in treeview"""
+    global total_row_iid
+    total = 0.0
+    for item in tree.get_children():
+        if item == total_row_iid:
+            continue
+        vals = tree.item(item, 'values')
+        qty = _parse_float(vals[5]) or 0
+        cost = _parse_float(vals[6]) or 0
+        bending = _parse_float(vals[7]) or 0
+        additional = _parse_float(vals[8]) or 0
+        total += (cost + bending + additional) * qty
+    tree.set(total_row_iid, column="7", value=format_pln(total))
+    SetTotalPricePerOrder(total)
 
 # ---- Price list loaders ----
 def _tree_preview_clear_and_headers(headers):
@@ -683,7 +730,6 @@ def parse_duration_to_hours(value) -> float:
     return h + m/60.0 + sec/3600.0
 
 
-
 # ---- Dynamic pricing based on thickness, length and time ----
 _THK_SPEED_MPM = [
     (1.0, 18.0),
@@ -768,7 +814,7 @@ def apply_dynamic_pricing(price_per_kg: float, rate_per_m: float, thickness_mm: 
     - material and cutting: additional 'boost' multiplier depending on time (1.0 → 3.5 = +250%) according to thresholds,
     - material: max(1.07, boost) × purchase price,
       cutting:   boost × rate per meter.
-    Returns (material_price_adj, cutting_rate_adj).
+    Returns (material_price_adj, cutting_rate_adj, debug_dict).
     """
     try:
         base_material = float(price_per_kg or 0.0)
@@ -785,78 +831,27 @@ def apply_dynamic_pricing(price_per_kg: float, rate_per_m: float, thickness_mm: 
     mat_adj = base_material * material_factor
     rate_adj = base_rate * cutting_factor
 
-    return mat_adj, rate_adj
+    dbg = {
+        'eff_minutes': eff_minutes,
+        't_min_t_neutral': get_time_thresholds_minutes(thickness_mm),
+        'boost': boost,
+        'material_factor': material_factor,
+        'cutting_factor': cutting_factor,
+    }
+    return mat_adj, rate_adj, dbg
 
-def update_cost_calculations():
-    """Update all cost calculation displays in Panel 2"""
-    global oxygen_cutting_time, nitrogen_cutting_time, total_material_cost
-    
-    # Get rates from entries
-    oxygen_rate = _parse_float(oxygen_rate_entry.get()) or 0.0
-    nitrogen_rate = _parse_float(nitrogen_rate_entry.get()) or 0.0
-    op_cost_per_sheet = _parse_float(op_cost_entry.get()) or 0.0
-    tech_per_order = _parse_float(tech_order_entry.get()) or 0.0
-    add_costs_order = _parse_float(add_order_cost_entry.get()) or 0.0
-    
-    # Calculate cutting costs
-    oxygen_cost = oxygen_cutting_time * oxygen_rate
-    nitrogen_cost = nitrogen_cutting_time * nitrogen_rate
-    total_cutting_cost = oxygen_cost + nitrogen_cost
-    
-    # Calculate operational costs
-    operational_costs = (total_sheets * op_cost_per_sheet) + tech_per_order + add_costs_order
-    
-    # Calculate total
-    total_all_costs = total_material_cost + total_cutting_cost + operational_costs
-    
-    # Update display labels
-    oxygen_time_label.config(text=f"{oxygen_cutting_time:.2f}".replace('.', ','))
-    nitrogen_time_label.config(text=f"{nitrogen_cutting_time:.2f}".replace('.', ','))
-    oxygen_cost_label.config(text=format_pln(oxygen_cost))
-    nitrogen_cost_label.config(text=format_pln(nitrogen_cost))
-    material_cost_label.config(text=format_pln(total_material_cost))
-    total_cutting_cost_label.config(text=format_pln(total_cutting_cost))
-    operational_cost_label.config(text=format_pln(operational_costs))
-    total_all_costs_label.config(text=format_pln(total_all_costs))
-
-def update_total():
-    """Recalculate total after manual edits in treeview"""
-    global total_row_iid
-    total = 0.0
-    for item in tree.get_children():
-        if item == total_row_iid:
-            continue
-        vals = tree.item(item, 'values')
-        qty = _parse_float(vals[5]) or 0
-        cost = _parse_float(vals[6]) or 0
-        bending = _parse_float(vals[7]) or 0
-        additional = _parse_float(vals[8]) or 0
-        total += (cost + bending + additional) * qty
-    tree.set(total_row_iid, column="7", value=format_pln(total))
-    SetTotalPricePerOrder(total)
-
-def get_next_offer_number():
-    month_year = datetime.datetime.now().strftime("%m/%Y")
-    month_key = datetime.datetime.now().strftime("counter_%Y-%m")
-    try:
-        response = requests.get(f"https://abacus.jasoncameron.dev/hit/xai_offers/{month_key}")
-        if response.status_code == 200:
-            counter_value = int(response.json()['value'])
-            return f"Laser/{counter_value:04d}/{month_year}"
-        else:
-            return "Laser/0001/08/2025"  # Fallback
-    except Exception:
-        return "Laser/0001/08/2025"  # Fallback
 
 # References to PhotoImage to prevent images from disappearing (GC)
 thumbnail_imgs = []
 
 def analyze_xlsx_folder():
     global all_parts, last_groups, last_total_cost, last_folder_path, total_sheets, total_parts_qty, total_row_iid
-    global oxygen_cutting_time, nitrogen_cutting_time, total_material_cost, is_manual, sheet_data
+    global oxygen_cutting_time, nitrogen_cutting_time, total_material_cost
     
-    is_manual = False
-    sheet_data = []
+    # Initialize cutting time accumulators
+    oxygen_cutting_time = 0.0
+    nitrogen_cutting_time = 0.0
+    total_material_cost = 0.0
 
     for item in tree.get_children():
         tree.delete(item)
@@ -885,10 +880,6 @@ def analyze_xlsx_folder():
     subnr = 0
 
     thumbnails = {}  # To store raw image data for each file if needed
-
-    oxygen_cutting_time = 0.0
-    nitrogen_cutting_time = 0.0
-    total_material_cost = 0.0
 
     for fname in files:
         path = os.path.join(folder_path, fname)
@@ -930,7 +921,7 @@ def analyze_xlsx_folder():
             base_price_per_kg = material_prices.get((mat_norm, thk_val), 0.0)
             base_rate_per_cut_length = cutting_prices.get((thk_val, mat_norm, gas_key), 0.0)
 
-            price_per_kg, rate_per_cut_length = apply_dynamic_pricing(
+            price_per_kg, rate_per_cut_length, _dpdbg = apply_dynamic_pricing(
                 base_price_per_kg, base_rate_per_cut_length, thk_val, total_cut_length, cut_time
             )
 
@@ -999,7 +990,6 @@ def analyze_xlsx_folder():
             subnr += 1
             lp = 0
             row = start_row
-            total_adj_weight = 0.0
             while row <= cost_sheet.max_row and isinstance(cost_sheet.cell(row=row, column=1).value, (int, float)):
                 lp += 1
                 part_name = cost_sheet.cell(row=row, column=2).value
@@ -1071,27 +1061,7 @@ def analyze_xlsx_folder():
                 parts_for_group.append((part_name, float(f"{total_part:.2f}"),
                                         int(part_qty) if isinstance(part_qty, (int, float)) else 0))
                 total_parts_qty += int(part_qty) if isinstance(part_qty, (int, float)) else 0
-                total_adj_weight += adj_weight * (int(part_qty) if isinstance(part_qty, (int, float)) else 0)
                 row += 1
-
-            sheet_info = {
-                'file': fname,
-                'material': mat_norm,
-                'thickness': thk_val,
-                'gas': gas_key,
-                'cut_time': cut_time,
-                'total_cut_length': total_cut_length,
-                'utilization_rate': utilization_rate,
-                'base_price_per_kg': base_price_per_kg,
-                'price_per_kg': price_per_kg,
-                'base_rate_per_cut_length': base_rate_per_cut_length,
-                'rate_per_cut_length': rate_per_cut_length,
-                'rate_per_contour': rate_per_contour,
-                'rate_per_marking_length': rate_per_marking_length,
-                'rate_per_defilm_length': rate_per_defilm_length,
-                'total_adj_weight': total_adj_weight
-            }
-            sheet_data.append(sheet_info)
 
             groups.append((material_name, thk_val, parts_for_group))
 
@@ -1160,7 +1130,7 @@ def analyze_xlsx_folder():
     SetTotalPricePerOrder(total_order)
     total_row_iid = tree.insert('', 'end', values=('', '', 'Total', '', '', '', format_pln(total_order), '', '', '', ''))
 
-   # Create merged groups (this this code should already exist in your function)
+   # Create merged groups (this code should already exist in your function)
     total_sum = 0.0
     merged_groups = []
     for (mat_name, thk, parts) in groups:
@@ -1178,6 +1148,21 @@ def analyze_xlsx_folder():
     
     messagebox.showinfo("Analysis", "XLSX files analysis completed. Data in Panel 1 filled.")
 
+
+def get_next_offer_number():
+    month_year = datetime.datetime.now().strftime("%m/%Y")
+    month_key = datetime.datetime.now().strftime("counter_%Y-%m")
+    try:
+        response = requests.get(f"https://abacus.jasoncameron.dev/hit/xai_offers/{month_key}")
+        if response.status_code == 200:
+            counter_value = int(response.json()['value'])
+            return f"Laser/{counter_value:04d}/{month_year}"
+        else:
+            return "Laser/0001/08/2025"  # Fallback
+    except Exception:
+        return "Laser/0001/08/2025"  # Fallback
+
+# report
 def generate_report():
     if not all_parts:
         messagebox.showerror("Error", "No data for the report. First 'Analyze XLSX'.")
@@ -1225,30 +1210,7 @@ def generate_report():
         log.write(f"Folder: {folder_path}\n")
         log.write(f"Client: {customer_name}\n")
         log.write("Price sources: materials prices.xlsx, cutting prices.xlsx\n")
-        log.write(f"Valuation mode: {'manual (forced by operator via button)' if is_manual else 'automatic based on xlsx analysis'}\n")
-        log.write("\nSheet data:\n")
-        for s in sheet_data:
-            log.write(f"File: {s['file']}\n")
-            log.write(f"Material: {s['material']} {s['thickness']} mm, Gas: {s['gas']}\n")
-            log.write(f"Cut time: {s['cut_time']:.2f} h, Cut length: {s['total_cut_length']:.2f} m\n")
-            log.write(f"Utilization: {s['utilization_rate']*100:.1f}%\n")
-            log.write(f"Total adjusted weight: {s['total_adj_weight']:.3f} kg\n")
-            log.write(f"Material price: base {s['base_price_per_kg']:.2f}, adj {s['price_per_kg']:.2f} PLN/kg\n")
-            log.write(f"Cutting rate: base {s['base_rate_per_cut_length']:.2f}, adj {s['rate_per_cut_length']:.2f} PLN/m\n")
-            log.write(f"Rates: contour {s['rate_per_contour']:.2f}, marking {s['rate_per_marking_length']:.2f}, defilm {s['rate_per_defilm_length']:.2f}\n\n")
-        log.write("\nPart details:\n")
-        for p in all_parts:
-            mat_cost = p['adj_weight'] * p['base_price_per_kg']
-            cut_cost = p['cut_length'] * p['base_rate_per_cut_length']
-            contour_cost = p['contours_qty'] * p['rate_per_contour']
-            marking_cost = p['marking_length'] * p['rate_per_marking_length']
-            defilm_cost = p['defilm_length'] * p['rate_per_defilm_length']
-            log.write(f"Part: {p['name']}, Qty: {p['qty']}, Weight raw: {p['raw_weight']:.3f}, adj: {p['adj_weight']:.3f} kg\n")
-            log.write(f"Cut length: {p['cut_length']:.2f} m, Contours: {p['contours_qty']}, Marking: {p['marking_length']:.2f}, Defilm: {p['defilm_length']:.2f}\n")
-            log.write(f"Costs: material {mat_cost:.2f}, cutting {cut_cost:.2f}\n")
-            log.write(f"Contours {contour_cost:.2f}, Marking {marking_cost:.2f}, Defilm {defilm_cost:.2f}\n")
-            log.write(f"Bending {p['bending_per_unit']:.2f}, Additional {p['additional_per_unit']:.2f}\n")
-            log.write(f"Unit cost: {p['cost_per_unit']:.2f}, Total: {p['cost_per_unit'] * p['qty']:.2f}\n\n")
+        log.write("\nCalculation Details:\n")
 
     # Generate DOCX
     doc = Document()
@@ -1662,7 +1624,7 @@ def generate_report():
             right=Side(style='thin'),
             top=Side(style='thin'),
             bottom=Side(style='thin')
-        )
+        )  # <- This closing parenthesis was missing
     
     # Add data rows with alternating colors
     data_start_row = header_row + 1
@@ -1788,8 +1750,12 @@ def generate_report():
     # Save the client report
     client_wb.save(os.path.join(raporty_path, "Client report.xlsx"))
     
+    # Generate DOCX (keep existing code for Word document)
+    # ... [existing DOCX generation code] ...
+    
     messagebox.showinfo("Success", "Reports generated in the Raporty folder.")
     
+
 
 # left buttons
 ttk.Button(buttons_frame, text="Analyze XLSX", command=analyze_xlsx_folder).pack(side="left", padx=5)
