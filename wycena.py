@@ -1,18 +1,20 @@
-
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 
 """
 wycena.py - Main GUI script for analyzing XLSX files and generating cost reports.
+ENHANCED VERSION with Dynamic Margin Calculations
 
 Usage instructions:
 1. Run the script in a Python 3 environment with installed libraries: tkinter, openpyxl, docx, Pillow, requests.
 2. Select the folder with XLSX files.
-3. Analyze XLSX to fill the table.
-4. Edit values in the table if needed (quantity, laser, bending, additional).
-5. Click "Generate report" to create the DOCX offer, XLSX reports, and log.
+3. Configure margin parameters in the new fields.
+4. Analyze XLSX to fill the table with dynamic margin calculations.
+5. Edit values in the table if needed (quantity, laser, bending, additional).
+6. Click "Update with Margins" to apply new margin calculations.
+7. Click "Generate report" to create the DOCX offer, XLSX reports, and log.
 
-The script is optimized for readability and performance, with full documentation.
+The script now includes dynamic margin calculations based on material plate size and cutting length.
 """
 
 import os
@@ -22,7 +24,7 @@ from datetime import timedelta
 import re
 from tkinter import ttk
 import tkinter as tk
-from tkinter import filedialog, messagebox
+from tkinter import filedialog, messagebox, scrolledtext
 from openpyxl import load_workbook
 from openpyxl import Workbook
 from openpyxl.drawing.image import Image as OpenpyxlImage
@@ -38,8 +40,6 @@ import io
 from PIL import Image, ImageTk
 import locale
 import requests
-
-# total order value
 
 def SetTotalPricePerOrder(value):
     global total_price_per_order
@@ -92,6 +92,50 @@ def _map_gas_to_key(gas_raw: str) -> str:
         return "O"
     return ""
 
+# ---- Analysis Logger Class ----
+class AnalysisLogger:
+    def __init__(self, text_widget):
+        self.text_widget = text_widget
+        self.phase_counter = 0
+        
+    def clear(self):
+        """Clear the log widget"""
+        self.text_widget.config(state=tk.NORMAL)
+        self.text_widget.delete(1.0, tk.END)
+        self.text_widget.config(state=tk.DISABLED)
+        self.phase_counter = 0
+        
+    def log(self, message, level="INFO"):
+        """Log a message with specified level (INFO, WARNING, ERROR, SUCCESS, PHASE)"""
+        self.text_widget.config(state=tk.NORMAL)
+        
+        timestamp = datetime.datetime.now().strftime("%H:%M:%S")
+        
+        # Format and add message based on level
+        if level == "PHASE":
+            self.phase_counter += 1
+            formatted_message = f"\n[{timestamp}] ===== PHASE {self.phase_counter}: {message} =====\n"
+            self.text_widget.insert(tk.END, formatted_message, "phase")
+        elif level == "ERROR":
+            formatted_message = f"[{timestamp}] ❌ ERROR: {message}\n"
+            self.text_widget.insert(tk.END, formatted_message, "error")
+        elif level == "WARNING":
+            formatted_message = f"[{timestamp}] ⚠️ WARNING: {message}\n"
+            self.text_widget.insert(tk.END, formatted_message, "warning")
+        elif level == "SUCCESS":
+            formatted_message = f"[{timestamp}] ✅ SUCCESS: {message}\n"
+            self.text_widget.insert(tk.END, formatted_message, "success")
+        else:  # INFO
+            formatted_message = f"[{timestamp}] ℹ️ {message}\n"
+            self.text_widget.insert(tk.END, formatted_message, "info")
+        
+        # Auto-scroll to bottom
+        self.text_widget.see(tk.END)
+        self.text_widget.config(state=tk.DISABLED)
+        
+        # Force update to show log immediately
+        self.text_widget.update_idletasks()
+
 # ---- price lists ----
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 MATERIALS_FILE = os.path.join(SCRIPT_DIR, "materials prices.xlsx")
@@ -107,10 +151,16 @@ last_total_cost = 0.0
 last_folder_path = ""
 total_sheets = 0
 total_parts_qty = 0
+analysis_logger = None  # Will be initialized after GUI creation
+
+# NEW: Global variables for margin calculations
+file_margins = []  # List of margin data for each file
+avg_material_margin = 0.0
+avg_cutting_margin = 0.0
 
 # ---- GUI ----
 root = tk.Tk()
-root.title("Cost Report Generator — MERGED (fixed)")
+root.title("Cost Report Generator – Enhanced with Dynamic Margins")
 root.configure(bg="#2c2c2c")  # Dark background for modern look
 
 # Use a modern ttk theme
@@ -132,6 +182,14 @@ date_var     = tk.StringVar(value=datetime.datetime.now().strftime("%Y-%m-%d"))
 validity_var = tk.StringVar(value=(datetime.datetime.now() + timedelta(days=14)).strftime("%Y-%m-%d"))
 logo_var     = tk.StringVar()
 
+# NEW: Margin calculation variables
+material_margin_var = tk.StringVar(value="50,00")  # Default proposed material margin
+cutting_margin_var = tk.StringVar(value="75,00")   # Default proposed cutting margin
+min_area_var = tk.StringVar(value="0,01")          # Minimum area for 100% margin (m²)
+max_area_var = tk.StringVar(value="1,00")          # Maximum area for 0% margin (m²)
+min_cutting_var = tk.StringVar(value="100,00")     # Minimum cutting length for 250% margin (mm)
+max_cutting_var = tk.StringVar(value="5000,00")    # Maximum cutting length for 0% margin (mm)
+
 default_logo_path = os.path.join(SCRIPT_DIR, "Logo.jpg")
 if os.path.exists(default_logo_path):
     logo_var.set(default_logo_path)
@@ -140,69 +198,141 @@ if os.path.exists(default_logo_path):
 left_frame = tk.Frame(root, bg="#2c2c2c")
 left_frame.pack(side="left", padx=10, pady=10, fill="y")
 
+# Add Analysis Log Panel at the top of left frame
+log_frame = tk.LabelFrame(left_frame, text="ANALYSIS LOG", bg="#2c2c2c", fg="white", padx=5, pady=5)
+log_frame.grid(row=0, column=0, columnspan=3, sticky="ew", pady=(0, 10))
+
+# Create scrolled text widget for log
+log_text = scrolledtext.ScrolledText(
+    log_frame, 
+    height=12, 
+    width=60, 
+    bg="#1c1c1c", 
+    fg="white", 
+    insertbackground="white",
+    wrap=tk.WORD,
+    state=tk.DISABLED
+)
+log_text.pack(fill="both", expand=True)
+
+# Configure text tags for different log levels
+log_text.tag_configure("phase", foreground="#00BFFF", font=("Arial", 10, "bold"))
+log_text.tag_configure("error", foreground="#FF4444", font=("Arial", 10, "bold"))
+log_text.tag_configure("warning", foreground="#FFA500", font=("Arial", 10))
+log_text.tag_configure("success", foreground="#00FF00", font=("Arial", 10))
+log_text.tag_configure("info", foreground="#FFFFFF", font=("Arial", 10))
+
+# Initialize the logger
+analysis_logger = AnalysisLogger(log_text)
+
+# Clear log button
+ttk.Button(log_frame, text="Clear Log", command=analysis_logger.clear).pack(pady=(5, 0))
+
 def update_file_list(folder_path):
     file_list.delete(0, tk.END)
     try:
-        for f in os.listdir(folder_path):
-            if f.lower().endswith(".xlsx"):
-                file_list.insert(tk.END, f)
-    except Exception:
-        pass
+        xlsx_files = [f for f in os.listdir(folder_path) if f.lower().endswith(".xlsx")]
+        for f in xlsx_files:
+            file_list.insert(tk.END, f)
+        analysis_logger.log(f"Found {len(xlsx_files)} XLSX files in folder", "INFO")
+    except Exception as e:
+        analysis_logger.log(f"Failed to read folder: {str(e)}", "ERROR")
 
 def select_folder():
     p = filedialog.askdirectory()
     if p:
-        folder_var.set(p); update_file_list(p)
+        folder_var.set(p)
+        update_file_list(p)
+        analysis_logger.log(f"Selected folder: {p}", "SUCCESS")
 
-ttk.Label(left_frame, text="Select folder:").grid(row=0, column=0, sticky="e")
-ttk.Entry(left_frame, textvariable=folder_var, width=50).grid(row=0, column=1)
-ttk.Button(left_frame, text="Browse", command=select_folder).grid(row=0, column=2)
+# Shift all row numbers down by 1 to account for the log panel
+ttk.Label(left_frame, text="Select folder:").grid(row=1, column=0, sticky="e")
+ttk.Entry(left_frame, textvariable=folder_var, width=50).grid(row=1, column=1)
+ttk.Button(left_frame, text="Browse", command=select_folder).grid(row=1, column=2)
 
-ttk.Label(left_frame, text="Client name:").grid(row=1, column=0, sticky="e")
-ttk.Entry(left_frame, textvariable=customer_var).grid(row=1, column=1)
-ttk.Label(left_frame, text="Offer number:").grid(row=2, column=0, sticky="e")
-ttk.Entry(left_frame, textvariable=offer_var).grid(row=2, column=1)
-ttk.Button(left_frame, text="Get number", command=lambda: offer_var.set(get_next_offer_number())).grid(row=2, column=2)
-ttk.Label(left_frame, text="Offer date:").grid(row=3, column=0, sticky="e")
-ttk.Entry(left_frame, textvariable=date_var).grid(row=3, column=1)
-ttk.Label(left_frame, text="Validity period:").grid(row=4, column=0, sticky="e")
-ttk.Entry(left_frame, textvariable=validity_var).grid(row=4, column=1)
+ttk.Label(left_frame, text="Client name:").grid(row=2, column=0, sticky="e")
+ttk.Entry(left_frame, textvariable=customer_var).grid(row=2, column=1)
+ttk.Label(left_frame, text="Offer number:").grid(row=3, column=0, sticky="e")
+ttk.Entry(left_frame, textvariable=offer_var).grid(row=3, column=1)
+ttk.Button(left_frame, text="Get number", command=lambda: offer_var.set(get_next_offer_number())).grid(row=3, column=2)
+ttk.Label(left_frame, text="Offer date:").grid(row=4, column=0, sticky="e")
+ttk.Entry(left_frame, textvariable=date_var).grid(row=4, column=1)
+ttk.Label(left_frame, text="Validity period:").grid(row=5, column=0, sticky="e")
+ttk.Entry(left_frame, textvariable=validity_var).grid(row=5, column=1)
 
 def upload_logo():
     p = filedialog.askopenfilename(filetypes=[("Image files", "*.png;*.jpg;*.jpeg")])
-    if p: logo_var.set(p)
+    if p: 
+        logo_var.set(p)
+        analysis_logger.log(f"Logo selected: {os.path.basename(p)}", "INFO")
 
-ttk.Label(left_frame, text="Load logo:").grid(row=5, column=0, sticky="e")
-ttk.Entry(left_frame, textvariable=logo_var, width=50).grid(row=5, column=1)
-ttk.Button(left_frame, text="Browse", command=upload_logo).grid(row=5, column=2)
+ttk.Label(left_frame, text="Load logo:").grid(row=6, column=0, sticky="e")
+ttk.Entry(left_frame, textvariable=logo_var, width=50).grid(row=6, column=1)
+ttk.Button(left_frame, text="Browse", command=upload_logo).grid(row=6, column=2)
 
-ttk.Label(left_frame, text="Contact details:").grid(row=6, column=0, sticky="ne")
+ttk.Label(left_frame, text="Contact details:").grid(row=7, column=0, sticky="ne")
 contact_text = tk.Text(left_frame, height=5, width=50, bg="#3c3c3c", fg="white", insertbackground="white")
-contact_text.grid(row=6, column=1)
+contact_text.grid(row=7, column=1)
 contact_text.insert(tk.INSERT,
     "LP KONSTAL Sp. z o.o.\n59-800 Lubań\nPisarzowice 203B\nNIP: 1010004508\n\n"
     "Laser Team\nMateusz Brzostek M. +48 537 883 393\n"
     "Artur Jednoróg M. +48 515 803 333\nE. laser@konstal.com"
 )
 
-ttk.Label(left_frame, text="Preceding text:").grid(row=7, column=0, sticky="ne")
+# NEW: Add Margin Calculation Panel
+margin_frame = tk.LabelFrame(left_frame, text="DYNAMIC MARGIN SETTINGS", bg="#2c2c2c", fg="yellow", padx=5, pady=5)
+margin_frame.grid(row=8, column=0, columnspan=3, sticky="ew", pady=(10, 5))
+
+# Material margin settings
+ttk.Label(margin_frame, text="Proposed margin for material [%]:").grid(row=0, column=0, sticky="e")
+ttk.Entry(margin_frame, textvariable=material_margin_var, width=15).grid(row=0, column=1, sticky="w", padx=(5,10))
+
+ttk.Label(margin_frame, text="Proposed margin for cutting [%]:").grid(row=0, column=2, sticky="e")
+ttk.Entry(margin_frame, textvariable=cutting_margin_var, width=15).grid(row=0, column=3, sticky="w", padx=(5,0))
+
+# Limit values for material area
+ttk.Label(margin_frame, text="Min area for 100% margin [m²]:").grid(row=1, column=0, sticky="e")
+ttk.Entry(margin_frame, textvariable=min_area_var, width=15).grid(row=1, column=1, sticky="w", padx=(5,10))
+
+ttk.Label(margin_frame, text="Max area for 0% margin [m²]:").grid(row=1, column=2, sticky="e")
+ttk.Entry(margin_frame, textvariable=max_area_var, width=15).grid(row=1, column=3, sticky="w", padx=(5,0))
+
+# Limit values for cutting length
+ttk.Label(margin_frame, text="Min length for 250% margin [mm]:").grid(row=2, column=0, sticky="e")
+ttk.Entry(margin_frame, textvariable=min_cutting_var, width=15).grid(row=2, column=1, sticky="w", padx=(5,10))
+
+ttk.Label(margin_frame, text="Max length for 0% margin [mm]:").grid(row=2, column=2, sticky="e")
+ttk.Entry(margin_frame, textvariable=max_cutting_var, width=15).grid(row=2, column=3, sticky="w", padx=(5,0))
+
+# Display calculated averages
+avg_display_frame = tk.Frame(margin_frame, bg="#2c2c2c")
+avg_display_frame.grid(row=3, column=0, columnspan=4, pady=(10,5), sticky="ew")
+
+ttk.Label(avg_display_frame, text="Calculated avg material margin:", font=("Arial", 9, "bold")).pack(side="left")
+avg_material_label = ttk.Label(avg_display_frame, text="0.00%", foreground="lime", font=("Arial", 9, "bold"))
+avg_material_label.pack(side="left", padx=(5,20))
+
+ttk.Label(avg_display_frame, text="Calculated avg cutting margin:", font=("Arial", 9, "bold")).pack(side="left")
+avg_cutting_label = ttk.Label(avg_display_frame, text="0.00%", foreground="lime", font=("Arial", 9, "bold"))
+avg_cutting_label.pack(side="left", padx=(5,0))
+
+ttk.Label(left_frame, text="Preceding text:").grid(row=9, column=0, sticky="ne")
 preceding_text_var = tk.Text(left_frame, height=5, width=50, bg="#3c3c3c", fg="white", insertbackground="white")
-preceding_text_var.grid(row=7, column=1)
+preceding_text_var.grid(row=9, column=1)
 preceding_text_var.insert(tk.INSERT,
     "Szanowni Państwo,\n\n"
     "dziękujemy za przesłanie zapytania ofertowego dotyczącego usługi cięcia laserem blach. "
-    "Z przyjemnością przedstawiamy przygotowaną dla Państwa ofertę..."
-)
+    "Z przyjemnością przedstawiamy przygotowaną dla Państwa ofertę...")
 
-ttk.Label(left_frame, text="").grid(row=8, column=0, pady=10)
-ttk.Label(left_frame, text="Finishing text:").grid(row=9, column=0, sticky="ne")
+ttk.Label(left_frame, text="").grid(row=10, column=0, pady=10)
+ttk.Label(left_frame, text="Finishing text:").grid(row=11, column=0, sticky="ne")
 finishing_text_var = tk.Text(left_frame, height=10, width=50, bg="#3c3c3c", fg="white", insertbackground="white")
-finishing_text_var.grid(row=9, column=1)
-finishing_text_var.insert(tk.INSERT, "Wyłączenia odpowiedzialności \r\nDokumentacja techniczna\r\nRealizacja zamówienia odbywa się wyłącznie na podstawie dokumentacji technicznej dostarczonej przez Klienta. Odpowiedzialność za jej kompletność, poprawność oraz zgodność z założeniami projektowymi leży wyłącznie po stronie Zleceniodawcy. Wszelkie błędy, niejasności, czy niezgodności w przesłanych plikach uniemożliwiające prawidłowe wykonanie wyrobu, nie mogą stanowić podstawy do roszczeń wobec naszej firmy.\r\n\r\nMateriał powierzone i dostarczany przez Klienta\r\nNie ponosimy odpowiedzialności za uszkodzenia, błędy obróbki, zmiany struktury, odkształcenia ani inne wady powstałe w wyniku specyficznych właściwości materiału powierzonego przez Klienta, jego niejednorodności, błędnej deklaracji gatunku, braku wymaganych atestów czy oznaczeń partii. Klient zobowiązany jest dostarczyć materiał zgodny ze specyfikacją oraz wolny od wad fizycznych i chemicznych, mogących negatywnie wpływać na proces cięcia i jakość finalnego wyrobu.\r\n\r\nDostawcy materiałów\r\nNasza firma dołoży wszelkich starań w zakresie selekcji i zakupów materiałów wyłącznie od sprawdzonych dostawców. Zastrzegamy sobie jednak, że odpowiedzialność za parametry, właściwości lub wady ukryte materiału ogranicza się wyłącznie do zakresu wynikającego z dokumentacji danego producenta lub certyfikatu jakości — zgodnie z obowiązującym prawem oraz praktyką rynku stalowego.\r\n\r\nOgraniczenie odpowiedzialności prawnej\r\nOdpowiadamy wyłącznie za zgodność wykonanych prac z przesłaną dokumentacją oraz z obowiązującymi normami i przepisami prawa. Nie ponosimy odpowiedzialności za ewentualne szkody pośrednie, utracone korzyści, koszty produkcji, opóźnienia wynikające z przerw w dostawie materiałów, siły wyższej, zdarzeń losowych czy skutków niezastosowania się Klienta do obowiązujących przepisów i wymogów technicznych.\r\n\r\nPrzepisy prawa i gwarancje\r\nWszelkie realizacje podlegają przepisom prawa polskiego, normom branżowym oraz ustaleniom indywidualnym zawartym w zamówieniu. Ewentualna odpowiedzialność spółki ogranicza się do wartości usługi, a w szczególnych wypadkach — do ponownego wykonania usługi lub zwrotu jej kosztu. Nie udzielamy gwarancji na materiały powierzone, a zakres gwarancji na produkty wykonane z własnych materiałów jest określony indywidualnie w ofercie i na fakturze.\r\n\r\nMamy nadzieję, że powyższe wyjaśnienia pozwolą na jasne i czytelne określenie zasad współpracy oraz przyczynią się do pomyślnej realizacji Państwa zamówienia. Zapraszamy do zapoznania się ze szczegółami przygotowanej oferty oraz kontaktu w przypadku pytań lub wątpliwości.\r\n\r\nZ wyrazami szacunku,\r\nLaserTeam")
+finishing_text_var.grid(row=11, column=1)
+finishing_text_var.insert(tk.INSERT, "Wyłączenia odpowiedzialności \r\nDokumentacja techniczna\r\nRealizacja zamówienia odbywa się wyłącznie na podstawie dokumentacji technicznej dostarczonej przez Klienta. Odpowiedzialność za jej kompletność, poprawność oraz zgodność z założeniami projektowymi leży wyłącznie po stronie Zleceniodawcy. Wszelkie błędy, niejasności, czy niezgodności w przesłanych plikach uniemożliwiające prawidłowe wykonanie wyrobu, nie mogą stanowić podstawy do roszczeń wobec naszej firmy.\r\n\r\nMateriał powierzone i dostarczany przez Klienta\r\nNie ponosimy odpowiedzialności za uszkodzenia, błędy obróbki, zmiany struktury, odkształcenia ani inne wady powstałe w wyniku specyficznych właściwości materiału powierzonego przez Klienta, jego niejednorodności, błędnej deklaracji gatunku, braku wymaganych atestów czy oznaczeń partii. Klient zobowiązany jest dostarczyć materiał zgodny ze specyfikacją oraz wolny od wad fizycznych i chemicznych, mogących negatywnie wpływać na proces cięcia i jakość finalnego wyrobu.\r\n\r\nDostawcy materiałów\r\nNasza firma dołoży wszelkich starań w zakresie selekcji i zakupów materiałów wyłącznie od sprawdzonych dostawców. Zastrzegamy sobie jednak, że odpowiedzialność za parametry, właściwości lub wady ukryte materiału ogranicza się wyłącznie do zakresu wynikającego z dokumentacji danego producenta lub certyfikatu jakości – zgodnie z obowiązującym prawem oraz praktyką rynku stalowego.\r\n\r\nOgraniczenie odpowiedzialności prawnej\r\nOdpowiadamy wyłącznie za zgodność wykonanych prac z przesłaną dokumentacją oraz z obowiązującymi normami i przepisami prawa. Nie ponosimy odpowiedzialności za ewentualne szkody pośrednie, utracone korzyści, koszty produkcji, opóźnienia wynikające z przerw w dostawie materiałów, siły wyższej, zdarzeń losowych czy skutków niezastosowania się Klienta do obowiązujących przepisów i wymogów technicznych.\r\n\r\nPrzepisy prawa i gwarancje\r\nWszelkie realizacje podlegają przepisom prawa polskiego, normom branżowym oraz ustaleniom indywidualnym zawartym w zamówieniu. Ewentualna odpowiedzialność spółki ogranicza się do wartości usługi, a w szczególnych wypadkach – do ponownego wykonania usługi lub zwrotu jej kosztu. Nie udzielamy gwarancji na materiały powierzone, a zakres gwarancji na produkty wykonane z własnych materiałów jest określony indywidualnie w ofercie i na fakturze.\r\n\r\nMamy nadzieję, że powyższe wyjaśnienia pozwolą na jasne i czytelne określenie zasad współpracy oraz przyczynią się do pomyślnej realizacji Państwa zamówienia. Zapraszamy do zapoznania się ze szczegółami przygotowanej oferty oraz kontaktu w przypadku pytań lub wątpliwości.\r\n\r\nZ wyrazami szacunku,\r\nLaserTeam")
 
-ttk.Label(left_frame, text="Read files:").grid(row=10, column=0, sticky="ne")
+ttk.Label(left_frame, text="Read files:").grid(row=12, column=0, sticky="ne")
 file_list = tk.Listbox(left_frame, height=5, width=50, bg="#3c3c3c", fg="white")
-file_list.grid(row=10, column=1)
+file_list.grid(row=12, column=1)
 
 def open_selected_file(event=None):
     sel = file_list.curselection()
@@ -210,13 +340,14 @@ def open_selected_file(event=None):
         f = os.path.join(folder_var.get(), file_list.get(sel[0]))
         try:
             os.startfile(f)
-        except Exception:
-            pass
+            analysis_logger.log(f"Opened file: {file_list.get(sel[0])}", "INFO")
+        except Exception as e:
+            analysis_logger.log(f"Failed to open file: {str(e)}", "ERROR")
 
 file_list.bind('<Double-Button-1>', open_selected_file)
 
 buttons_frame = tk.Frame(left_frame, bg="#2c2c2c")
-buttons_frame.grid(row=11, column=1, sticky="s")
+buttons_frame.grid(row=13, column=1, sticky="s")
 
 # RIGHT
 right_frame = tk.Frame(root, bg="#2c2c2c")
@@ -228,7 +359,7 @@ right_paned.pack(fill="both", expand=True)
 panel_a = tk.PanedWindow(right_paned, orient=tk.VERTICAL, bg="#2c2c2c", sashrelief="raised", borderwidth=1)
 
 # --- PANEL 1 ---
-subpanel1 = tk.LabelFrame(panel_a, text="PANEL 1 — PREVIEW", bg="#2c2c2c", fg="white")
+subpanel1 = tk.LabelFrame(panel_a, text="PANEL 1 – PREVIEW", bg="#2c2c2c", fg="white")
 columns = ("1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11")
 tree = ttk.Treeview(subpanel1, columns=columns, show="tree headings")
 tree.column("#0", width=150, minwidth=100, stretch=tk.NO)  # Increased width for better thumbnail visibility
@@ -298,77 +429,83 @@ ttk.Label(subpanel2, text="CUTTING TIME CALCULATION", font=("Arial", 10, "bold")
 ttk.Label(subpanel2, text="O₂ cutting rate [PLN/h]:").grid(row=1, column=2, sticky="w", padx=(20,10))
 oxygen_rate_entry = ttk.Entry(subpanel2)
 oxygen_rate_entry.grid(row=1, column=3, padx=(0,5))
-oxygen_rate_entry.insert(tk.INSERT, "300,00")
+oxygen_rate_entry.insert(tk.INSERT, "350,00")
 
 ttk.Label(subpanel2, text="N₂ cutting rate [PLN/h]:").grid(row=2, column=2, sticky="w", padx=(20,10))
 nitrogen_rate_entry = ttk.Entry(subpanel2)
 nitrogen_rate_entry.grid(row=2, column=3, padx=(0,5))
-nitrogen_rate_entry.insert(tk.INSERT, "350,00")
+nitrogen_rate_entry.insert(tk.INSERT, "550,00")
 
 ttk.Label(subpanel2, text="AL N₂ cutting rate [PLN/h]:").grid(row=3, column=2, sticky="w", padx=(20,10))
 al_nitrogen_rate_entry = ttk.Entry(subpanel2)
 al_nitrogen_rate_entry.grid(row=3, column=3, padx=(0,5))
-al_nitrogen_rate_entry.insert(tk.INSERT, "350,00")
+al_nitrogen_rate_entry.insert(tk.INSERT, "650,00")
 
 # Separator
-ttk.Label(subpanel2, text="").grid(row=4, column=0, columnspan=4, pady=5)
+ttk.Label(subpanel2, text="").grid(row=3, column=0, columnspan=4, pady=5)
 
 # Time and cost displays - spanning both column groups
-ttk.Label(subpanel2, text="O₂ cutting time [h]:").grid(row=5, column=0, sticky="w", padx=(5,10))
+ttk.Label(subpanel2, text="O₂ cutting time [h]:").grid(row=4, column=0, sticky="w", padx=(5,10))
 oxygen_time_label = ttk.Label(subpanel2, text="0,00", relief="sunken", anchor="e", width=20)
-oxygen_time_label.grid(row=5, column=1, sticky="ew", padx=(0,20))
+oxygen_time_label.grid(row=4, column=1, sticky="ew", padx=(0,20))
 
-ttk.Label(subpanel2, text="N₂ cutting time [h]:").grid(row=5, column=2, sticky="w", padx=(20,10))
+ttk.Label(subpanel2, text="N₂ cutting time [h]:").grid(row=4, column=2, sticky="w", padx=(20,10))
 nitrogen_time_label = ttk.Label(subpanel2, text="0,00", relief="sunken", anchor="e", width=20)
-nitrogen_time_label.grid(row=5, column=3, sticky="ew", padx=(0,5))
+nitrogen_time_label.grid(row=4, column=3, sticky="ew", padx=(0,5))
 
-ttk.Label(subpanel2, text="O₂ cutting cost [PLN]:").grid(row=6, column=0, sticky="w", padx=(5,10))
+ttk.Label(subpanel2, text="O₂ cutting cost [PLN]:").grid(row=5, column=0, sticky="w", padx=(5,10))
 oxygen_cost_label = ttk.Label(subpanel2, text="0,00", relief="sunken", anchor="e", width=20)
-oxygen_cost_label.grid(row=6, column=1, sticky="ew", padx=(0,20))
+oxygen_cost_label.grid(row=5, column=1, sticky="ew", padx=(0,20))
 
-ttk.Label(subpanel2, text="N₂ cutting cost [PLN]:").grid(row=6, column=2, sticky="w", padx=(20,10))
+ttk.Label(subpanel2, text="N₂ cutting cost [PLN]:").grid(row=5, column=2, sticky="w", padx=(20,10))
 nitrogen_cost_label = ttk.Label(subpanel2, text="0,00", relief="sunken", anchor="e", width=20)
-nitrogen_cost_label.grid(row=6, column=3, sticky="ew", padx=(0,5))
+nitrogen_cost_label.grid(row=5, column=3, sticky="ew", padx=(0,5))
 
 # Separator
-ttk.Label(subpanel2, text="").grid(row=7, column=0, columnspan=4, pady=5)
+ttk.Label(subpanel2, text="").grid(row=6, column=0, columnspan=4, pady=5)
 
 # Summary section header
-ttk.Label(subpanel2, text="COST SUMMARY", font=("Arial", 10, "bold")).grid(row=8, column=0, columnspan=4, pady=(5, 5))
+ttk.Label(subpanel2, text="COST SUMMARY", font=("Arial", 10, "bold")).grid(row=7, column=0, columnspan=4, pady=(5, 5))
 
 # Summary fields - arranged in two columns
-ttk.Label(subpanel2, text="Material cost [PLN]:").grid(row=9, column=0, sticky="w", padx=(5,10))
+ttk.Label(subpanel2, text="Material cost [PLN]:").grid(row=8, column=0, sticky="w", padx=(5,10))
 material_cost_label = ttk.Label(subpanel2, text="0,00", relief="sunken", anchor="e", width=20)
-material_cost_label.grid(row=9, column=1, sticky="ew", padx=(0,20))
+material_cost_label.grid(row=8, column=1, sticky="ew", padx=(0,20))
 
-ttk.Label(subpanel2, text="Total cutting cost [PLN]:").grid(row=9, column=2, sticky="w", padx=(20,10))
+ttk.Label(subpanel2, text="Total cutting cost [PLN]:").grid(row=8, column=2, sticky="w", padx=(20,10))
 total_cutting_cost_label = ttk.Label(subpanel2, text="0,00", relief="sunken", anchor="e", width=20)
-total_cutting_cost_label.grid(row=9, column=3, sticky="ew", padx=(0,5))
+total_cutting_cost_label.grid(row=8, column=3, sticky="ew", padx=(0,5))
 
-ttk.Label(subpanel2, text="Operational costs [PLN]:").grid(row=10, column=0, sticky="w", padx=(5,10))
+ttk.Label(subpanel2, text="Operational costs [PLN]:").grid(row=9, column=0, sticky="w", padx=(5,10))
 operational_cost_label = ttk.Label(subpanel2, text="0,00", relief="sunken", anchor="e", width=20)
-operational_cost_label.grid(row=10, column=1, sticky="ew", padx=(0,20))
+operational_cost_label.grid(row=9, column=1, sticky="ew", padx=(0,20))
 
 # Separator before total
-ttk.Label(subpanel2, text="").grid(row=11, column=0, columnspan=4, pady=5)
+ttk.Label(subpanel2, text="").grid(row=10, column=0, columnspan=4, pady=5)
 
 # Total sum - spanning columns for emphasis
-ttk.Label(subpanel2, text="TOTAL OF ALL COSTS [PLN]:").grid(row=12, column=0, columnspan=2, sticky="w", padx=(5,10))
+ttk.Label(subpanel2, text="TOTAL OF ALL COSTS [PLN]:").grid(row=11, column=0, columnspan=2, sticky="w", padx=(5,10))
 total_all_costs_label = ttk.Label(subpanel2, text="0,00", relief="sunken", anchor="e", width=30, font=("Arial", 11, "bold"))
-total_all_costs_label.grid(row=12, column=2, columnspan=2, sticky="ew", padx=(20,5))
+total_all_costs_label.grid(row=11, column=2, columnspan=2, sticky="ew", padx=(20,5))
 
 # Modify PANEL 2 section - add these elements after the total_all_costs_label (around row 11-12):
 
 # Make total costs editable with new label
-ttk.Label(subpanel2, text="TOTAL FOR CORRECTION [PLN]:").grid(row=14, column=0, columnspan=2, sticky="w", padx=(5,10))
+ttk.Label(subpanel2, text="TOTAL FOR CORRECTION [PLN]:").grid(row=13, column=0, columnspan=2, sticky="w", padx=(5,10))
 total_all_costs_entry = ttk.Entry(subpanel2, width=30, font=("Arial", 11, "bold"))
-total_all_costs_entry.grid(row=14, column=2, columnspan=2, sticky="ew", padx=(20,5))
+total_all_costs_entry.grid(row=13, column=2, columnspan=2, sticky="ew", padx=(20,5))
 total_all_costs_entry.insert(tk.INSERT, "0,00")
 
 # Add update button
 update_prices_button = ttk.Button(subpanel2, text="UPDATE PRICES BASED ON TIME", 
                                   command=lambda: update_prices_based_on_time())
-update_prices_button.grid(row=15, column=0, columnspan=4, pady=(10, 5))
+update_prices_button.grid(row=14, column=0, columnspan=4, pady=(10, 5))
+
+# NEW: Add margin update button
+update_margins_button = ttk.Button(subpanel2, text="UPDATE WITH DYNAMIC MARGINS", 
+                                   command=lambda: update_with_margins(),
+                                   style="TButton")
+update_margins_button.grid(row=15, column=0, columnspan=4, pady=(5, 5))
 
 # Add event handlers with Enter key support
 total_all_costs_entry.bind('<FocusOut>', lambda e: validate_total_entry() if all_parts else None)
@@ -388,8 +525,9 @@ al_nitrogen_rate_entry.bind('<FocusOut>', lambda e: update_cost_calculations() i
 op_cost_entry.bind('<FocusOut>', lambda e: update_cost_calculations() if all_parts else None)
 tech_order_entry.bind('<FocusOut>', lambda e: update_cost_calculations() if all_parts else None)
 add_order_cost_entry.bind('<FocusOut>', lambda e: update_cost_calculations() if all_parts else None)
+
 # --- PANEL 3 ---
-subpanel3 = tk.LabelFrame(panel_a, text="PANEL 3 — PRICE LISTS AND TESTS", bg="#2c2c2c", fg="white", padx=6, pady=6)
+subpanel3 = tk.LabelFrame(panel_a, text="PANEL 3 – PRICE LISTS AND TESTS", bg="#2c2c2c", fg="white", padx=6, pady=6)
 
 mat_frame = tk.LabelFrame(subpanel3, text="Material price list (PLN/kg)", bg="#2c2c2c", fg="white")
 mat_frame.grid(row=0, column=0, sticky="nwe", padx=4, pady=4)
@@ -402,7 +540,7 @@ material_var = tk.StringVar(); material_cb = ttk.Combobox(mat_frame, textvariabl
 ttk.Label(mat_frame, text="Thickness [mm]:").grid(row=2, column=0, sticky="e")
 thickness_mat_var = tk.StringVar(); thickness_mat_cb = ttk.Combobox(mat_frame, textvariable=thickness_mat_var, width=12, state="readonly"); thickness_mat_cb.grid(row=2, column=1, sticky="w")
 btn_find_mat = ttk.Button(mat_frame, text="Find material price", command=lambda: ui_find_material_price()); btn_find_mat.grid(row=3, column=0, columnspan=2, pady=4, sticky="we")
-material_result_label = ttk.Label(mat_frame, text="Material Result: —"); material_result_label.grid(row=4, column=0, columnspan=2, sticky="w")
+material_result_label = ttk.Label(mat_frame, text="Material Result: –"); material_result_label.grid(row=4, column=0, columnspan=2, sticky="w")
 
 cut_frame = tk.LabelFrame(subpanel3, text="Cutting price list (PLN/m)", bg="#2c2c2c", fg="white")
 cut_frame.grid(row=0, column=1, sticky="nwe", padx=4, pady=4)
@@ -416,7 +554,7 @@ thickness_cut_var = tk.StringVar(); thickness_cut_cb = ttk.Combobox(cut_frame, t
 ttk.Label(cut_frame, text="Gas:").grid(row=3, column=0, sticky="e")
 gas_var = tk.StringVar(); gas_cb = ttk.Combobox(cut_frame, textvariable=gas_var, width=12, state="readonly"); gas_cb.grid(row=3, column=1, sticky="w")
 btn_find_cut = ttk.Button(cut_frame, text="Find cutting price", command=lambda: ui_find_cutting_price()); btn_find_cut.grid(row=4, column=0, columnspan=2, pady=4, sticky="we")
-cutting_result_label = ttk.Label(cut_frame, text="Cutting Result: —"); cutting_result_label.grid(row=5, column=0, columnspan=2, sticky="w")
+cutting_result_label = ttk.Label(cut_frame, text="Cutting Result: –"); cutting_result_label.grid(row=5, column=0, columnspan=2, sticky="w")
 
 btn_load_both = ttk.Button(subpanel3, text="Load both price lists and refresh lists",
                           command=lambda: (load_material_prices(True), load_cutting_prices(True)))
@@ -426,68 +564,150 @@ subpanel3.grid_columnconfigure(0, weight=1); subpanel3.grid_columnconfigure(1, w
 panel_a.add(subpanel3, minsize=200)
 right_paned.add(panel_a)
 
-def update_cost_calculations():
-    """Update all cost calculation displays in Panel 2"""
-    global oxygen_cutting_time, nitrogen_cutting_time, aluminum_nitrogen_cutting_time, total_material_cost
+# NEW: Dynamic margin calculation functions
+def calculate_material_margin(plate_area_m2):
+    """Calculate material margin based on plate area using linear interpolation"""
+    min_area = _parse_float(min_area_var.get()) or 0.01  # Default 0.01 m²
+    max_area = _parse_float(max_area_var.get()) or 1.0   # Default 1.0 m²
     
-    # Get rates from entries
-    oxygen_rate = _parse_float(oxygen_rate_entry.get()) or 0.0
-    nitrogen_rate = _parse_float(nitrogen_rate_entry.get()) or 0.0
-    al_nitrogen_rate = _parse_float(al_nitrogen_rate_entry.get()) or 0.0
-    op_cost_per_sheet = _parse_float(op_cost_entry.get()) or 0.0
-    tech_per_order = _parse_float(tech_order_entry.get()) or 0.0
-    add_costs_order = _parse_float(add_order_cost_entry.get()) or 0.0
-    
-    # Calculate cutting costs
-    oxygen_cost = oxygen_cutting_time * oxygen_rate
-    nitrogen_cost = nitrogen_cutting_time * nitrogen_rate + aluminum_nitrogen_cutting_time * al_nitrogen_rate
-    total_cutting_cost = oxygen_cost + nitrogen_cost
-    
-    # Calculate operational costs
-    operational_costs = (total_sheets * op_cost_per_sheet) + tech_per_order + add_costs_order
-    
-    # Calculate base total
-    base_total = total_material_cost + total_cutting_cost + operational_costs
-    
-    # Update display labels
-    oxygen_time_label.config(text=f"{oxygen_cutting_time:.2f}".replace('.', ','))
-    nitrogen_time_label.config(text=f"{nitrogen_cutting_time + aluminum_nitrogen_cutting_time:.2f}".replace('.', ','))
-    oxygen_cost_label.config(text=format_pln(oxygen_cost))
-    nitrogen_cost_label.config(text=format_pln(nitrogen_cost))
-    material_cost_label.config(text=format_pln(total_material_cost))
-    total_cutting_cost_label.config(text=format_pln(total_cutting_cost))
-    operational_cost_label.config(text=format_pln(operational_costs))
-    
-    # Update the editable total field
-    total_all_costs_entry.delete(0, tk.END)
-    total_all_costs_entry.insert(0, format_pln(base_total))
-    total_all_costs_label.config(text=format_pln(base_total))
+    if plate_area_m2 <= min_area:
+        return 100.0  # 100% margin for very small areas
+    elif plate_area_m2 >= max_area:
+        return 0.0    # 0% margin for large areas
+    else:
+        # Linear interpolation between 100% and 0%
+        ratio = (plate_area_m2 - min_area) / (max_area - min_area)
+        return 100.0 * (1.0 - ratio)
 
-def validate_total_entry():
-    """Validate and format the manually entered total"""
+def calculate_cutting_margin(cutting_length_mm):
+    """Calculate cutting margin based on cutting length using linear interpolation"""
+    min_length = _parse_float(min_cutting_var.get()) or 100.0   # Default 100mm
+    max_length = _parse_float(max_cutting_var.get()) or 5000.0  # Default 5000mm
+    
+    if cutting_length_mm <= min_length:
+        return 250.0  # 250% margin for very short cutting
+    elif cutting_length_mm >= max_length:
+        return 0.0    # 0% margin for long cutting
+    else:
+        # Linear interpolation between 250% and 0%
+        ratio = (cutting_length_mm - min_length) / (max_length - min_length)
+        return 250.0 * (1.0 - ratio)
+
+def parse_plate_size(plate_size_str):
+    """Parse plate size string like '500*300' or '500x300' to get area in m²"""
+    if not plate_size_str:
+        return 0.0
+    
     try:
-        # Get text from the input field
-        value_str = total_all_costs_entry.get().strip()
+        # Handle different separators
+        size_str = str(plate_size_str).strip().replace('x', '*').replace('X', '*')
+        if '*' in size_str:
+            dimensions = size_str.split('*')
+            if len(dimensions) >= 2:
+                width_mm = _parse_float(dimensions[0]) or 0.0
+                height_mm = _parse_float(dimensions[1]) or 0.0
+                # Convert mm² to m²
+                return (width_mm * height_mm) / 1000000.0
+    except Exception as e:
+        analysis_logger.log(f"Error parsing plate size '{plate_size_str}': {e}", "WARNING")
+    
+    return 0.0
+
+def update_with_margins():
+    """Update all costs with dynamic margins"""
+    global all_parts, total_row_iid, avg_material_margin, avg_cutting_margin
+    
+    if not all_parts:
+        messagebox.showwarning("Warning", "No data to update. Perform analysis first.")
+        return
+    
+    analysis_logger.log("APPLYING DYNAMIC MARGINS", "PHASE")
+    
+    try:
+        # Get proposed margins from input fields
+        proposed_material = _parse_float(material_margin_var.get()) or 0.0
+        proposed_cutting = _parse_float(cutting_margin_var.get()) or 0.0
         
-        # Remove spaces and replace commas with dots as decimal separator
-        value_str = value_str.replace(' ', '').replace(',', '.')
+        analysis_logger.log(f"Proposed margins: Material {proposed_material}%, Cutting {proposed_cutting}%", "INFO")
         
-        # Remove everything except digits and dot to avoid errors with other characters
-        value_str = ''.join(c for c in value_str if c.isdigit() or c == '.')
+        total_new_cost = 0.0
         
-        # Convert to float if the string is not empty
-        if value_str:
-            value = float(value_str)
-            if value is not None:
-                total_all_costs_entry.delete(0, tk.END)
-                total_all_costs_entry.insert(0, format_pln(value))
-    except ValueError:
-        pass  # Ignore errors if conversion fails
+        for i, part in enumerate(all_parts):
+            # Get current values from treeview
+            item_iid = list(tree.get_children())[i] if i < len(tree.get_children()) else None
+            if not item_iid or item_iid == total_row_iid:
+                continue
+            
+            # Calculate base costs (without margins)
+            base_material_cost = part.get('adj_weight', 0.0) * part.get('base_price_per_kg', 0.0) * 1.07  # Always keep 7% minimum
+            base_cut_cost = part.get('cut_length', 0.0) * part.get('base_rate_per_cut_length', 0.0)
+            
+            # Calculate dynamic margins based on stored file data
+            calculated_material_margin = part.get('calculated_material_margin', 0.0)
+            calculated_cutting_margin = part.get('calculated_cutting_margin', 0.0)
+            
+            # Use the higher of calculated or proposed margins
+            final_material_margin = max(calculated_material_margin, proposed_material)
+            final_cutting_margin = max(calculated_cutting_margin, proposed_cutting)
+            
+            # Apply margins
+            material_cost_with_margin = base_material_cost * (1.0 + final_material_margin / 100.0)
+            cutting_cost_with_margin = base_cut_cost * (1.0 + final_cutting_margin / 100.0)
+            
+            # Add other costs
+            contour_cost = part.get('contours_qty', 0.0) * part.get('rate_per_contour', 0.0)
+            marking_cost = part.get('marking_length', 0.0) * part.get('rate_per_marking_length', 0.0)
+            defilm_cost = part.get('defilm_length', 0.0) * part.get('rate_per_defilm_length', 0.0)
+            
+            # Calculate overhead per part
+            if total_parts_qty > 0:
+                extra_per_part = (_parse_float(tech_order_entry.get()) + _parse_float(add_order_cost_entry.get())) / total_parts_qty
+                op_cost_per_part = (total_sheets * _parse_float(op_cost_entry.get())) / total_parts_qty
+            else:
+                extra_per_part = 0.0
+                op_cost_per_part = 0.0
+            
+            # Final unit cost
+            new_unit_cost = (material_cost_with_margin + cutting_cost_with_margin + contour_cost + 
+                           marking_cost + defilm_cost + extra_per_part + op_cost_per_part)
+            
+            # Update part data
+            part['cost_per_unit'] = round(new_unit_cost, 2)
+            
+            # Update treeview
+            vals = list(tree.item(item_iid, 'values'))
+            vals[6] = format_pln(new_unit_cost)  # L+M Cost column
+            tree.item(item_iid, values=vals)
+            
+            # Calculate total for this part
+            qty = part.get('qty', 0)
+            bending = part.get('bending_per_unit', 0.0)
+            additional = part.get('additional_per_unit', 0.0)
+            total_new_cost += (new_unit_cost + bending + additional) * qty
+            
+            analysis_logger.log(f"Part {i+1}: Material margin {final_material_margin:.1f}%, Cutting margin {final_cutting_margin:.1f}%", "INFO")
+        
+        # Update total row
+        if total_row_iid:
+            tree.set(total_row_iid, column="7", value=format_pln(total_new_cost))
+            SetTotalPricePerOrder(total_new_cost)
+        
+        # Update cost calculations
+        update_cost_calculations()
+        
+        analysis_logger.log(f"Successfully applied dynamic margins. New total: {format_pln(total_new_cost)} PLN", "SUCCESS")
+        messagebox.showinfo("Success", f"Dynamic margins applied successfully!\nNew total: {format_pln(total_new_cost)} PLN")
+        
+    except Exception as e:
+        analysis_logger.log(f"Error applying margins: {str(e)}", "ERROR")
+        messagebox.showerror("Error", f"Failed to apply margins: {str(e)}")
 
 def update_prices_based_on_time():
     """Update unit prices in treeview based on time calculations and proportional distribution"""
-    global all_parts, total_row_iid
+    global all_parts, total_row_iid, is_manual
     
+    is_manual = True
+
     if not all_parts:
         messagebox.showwarning("Warning", "No data to update. Perform analysis first.")
         return
@@ -567,19 +787,26 @@ def update_prices_based_on_time():
                                   f"Old sum: {format_pln(current_total)}\n"
                                   f"New sum: {format_pln(new_grand_total)}")
 
-def update_total():
-    total = 0.0
-    for item in tree.get_children():
-        if item == total_row_iid:
-            continue
-        vals = tree.item(item, 'values')
-        qty = _parse_float(vals[5]) or 0
-        cost = _parse_float(vals[6]) or 0
-        bending = _parse_float(vals[7]) or 0
-        additional = _parse_float(vals[8]) or 0
-        total += (cost + bending + additional) * qty
-    tree.set(total_row_iid, column="7", value=format_pln(total))
-    SetTotalPricePerOrder(total)
+def validate_total_entry():
+    """Validate and format the manually entered total"""
+    try:
+        # Get text from the input field
+        value_str = total_all_costs_entry.get().strip()
+        
+        # Remove spaces and replace commas with dots as decimal separator
+        value_str = value_str.replace(' ', '').replace(',', '.')
+        
+        # Remove everything except digits and dot to avoid errors with other characters
+        value_str = ''.join(c for c in value_str if c.isdigit() or c == '.')
+        
+        # Convert to float if the string is not empty
+        if value_str:
+            value = float(value_str)
+            if value is not None:
+                total_all_costs_entry.delete(0, tk.END)
+                total_all_costs_entry.insert(0, format_pln(value))
+    except ValueError:
+        pass  # Ignore errors if conversion fails
 
 # ---- Price list loaders ----
 def _tree_preview_clear_and_headers(headers):
@@ -678,7 +905,7 @@ def get_total_cut_length(ws, text="Total") -> float:
     then reads the value from column H (8) in the same row.
     Returns float; handles Polish format '312,51'.
     """
-    # We only iterate over column A — it's fast and simple
+    # We only iterate over column A – it's fast and simple
     for cell in ws['A']:
         val = cell.value
         if val and str(text).lower() in str(val).lower():
@@ -740,21 +967,6 @@ def parse_duration_to_hours(value) -> float:
     return h + m/60.0 + sec/3600.0
 
 
-
-# ---- Dynamic pricing based on thickness, length and time ----
-_THK_SPEED_MPM = [
-    (1.0, 18.0),
-    (1.5, 18.0),
-    (2.0, 14.0),
-    (3.0, 4.0),
-    (5.0, 3.5),
-    (6.0, 3.0),
-    (8.0, 2.7),
-    (10.0, 2.1),
-    (12.0, 2.1),
-    (15.0, 2.1),
-]
-
 def _interp(x, pts):
     """Linear interpolation over sorted (x, y) points. Clamps outside the range."""
     pts = sorted(pts, key=lambda p: p[0])
@@ -769,89 +981,6 @@ def _interp(x, pts):
             t = (x - x0) / (x1 - x0)
             return y0 + t * (y1 - y0)
     return pts[-1][1]
-
-def get_speed_mpm(thickness_mm: float) -> float:
-    """Return cutting speed [m/min] for a given thickness using piecewise-linear interpolation."""
-    if thickness_mm is None:
-        return 0.0
-    return float(_interp(float(thickness_mm), _THK_SPEED_MPM))
-
-def get_time_thresholds_minutes(thickness_mm: float):
-    """
-    Returns (t_min, t_neutral) in minutes for the given thickness.
-    Anchors: 1 mm → (1, 45), 15 mm → (5, 90). Linearly and clamped.
-    """
-    thk = max(1.0, min(float(thickness_mm or 1.0), 15.0))
-    t_min = 1.0 + 4.0 * (thk - 1.0) / 14.0       # 1 → 5
-    t_neutral = 45.0 + 45.0 * (thk - 1.0) / 14.0 # 45 → 90
-    return (t_min, t_neutral)
-
-def compute_effective_minutes(thickness_mm: float, total_cut_length_m: float, cut_time_hours: float) -> float:
-    return cut_time_hours
-    """
-    Effective order time [min] based on path length and given cut_time.
-    Calculate time from length: L / v(thk), take maximum with the cell value.
-    """
-    speed = get_speed_mpm(thickness_mm)  # m/min
-    t_from_len = 0.0
-    if total_cut_length_m is not None and speed > 0:
-        try:
-            t_from_len = float(total_cut_length_m) / float(speed)
-        except Exception:
-            t_from_len = 0.0
-    t_from_cell = float(cut_time_hours or 0.0) * 60.0
-    if t_from_len <= 0:
-        return t_from_cell
-    if t_from_cell <= 0:
-        return t_from_len
-    return max(t_from_len, t_from_cell)
-
-def compute_boost_factor(thickness_mm: float, effective_minutes: float, max_boost: float = 3.5) -> float:
-    return 1.1
-    """
-    Multiplier in the range [1.0, max_boost].
-    = max_boost when time ≤ t_min; = 1.0 when time ≥ t_neutral; linear between.
-    """
-    t_min, t_neutral = get_time_thresholds_minutes(thickness_mm)
-    if effective_minutes <= t_min:
-        return float(max_boost)
-    if effective_minutes >= t_neutral:
-        return 1.0
-    alpha = (t_neutral - effective_minutes) / (t_neutral - t_min)  # (0,1)
-    return 1.0 + (max_boost - 1.0) * alpha
-
-def apply_dynamic_pricing(price_per_kg: float, rate_per_m: float, thickness_mm: float, total_cut_length_m: float, cut_time_hours: float):
-    """
-    Rules:
-    - material: MINIMUM +7% above purchase price,
-    - material and cutting: additional 'boost' multiplier depending on time (1.0 → 3.5 = +250%) according to thresholds,
-    - material: max(1.07, boost) × purchase price,
-      cutting:   boost × rate per meter.
-    Returns (material_price_adj, cutting_rate_adj, debug_dict).
-    """
-    try:
-        base_material = float(price_per_kg or 0.0)
-        base_rate = float(rate_per_m or 0.0)
-    except Exception:
-        base_material, base_rate = 0.0, 0.0
-
-    eff_minutes = compute_effective_minutes(thickness_mm, total_cut_length_m, cut_time_hours)
-    boost = compute_boost_factor(thickness_mm, eff_minutes, max_boost=3.5)
-
-    material_factor = max(1.07, boost)  # minimally +7%
-    cutting_factor = boost
-
-    mat_adj = base_material * material_factor
-    rate_adj = base_rate * cutting_factor
-
-    dbg = {
-        'eff_minutes': eff_minutes,
-        't_min_t_neutral': get_time_thresholds_minutes(thickness_mm),
-        'boost': boost,
-        'material_factor': material_factor,
-        'cutting_factor': cutting_factor,
-    }
-    return mat_adj, rate_adj, dbg
 
 
 def update_cost_calculations():
@@ -893,97 +1022,247 @@ thumbnail_imgs = []
 def analyze_xlsx_folder():
     global all_parts, last_groups, last_total_cost, last_folder_path, total_sheets, total_parts_qty, total_row_iid
     global oxygen_cutting_time, nitrogen_cutting_time, aluminum_nitrogen_cutting_time, total_material_cost
+    global file_margins, avg_material_margin, avg_cutting_margin
+    
+    # Clear log and start analysis
+    analysis_logger.clear()
+    analysis_logger.log("STARTING ENHANCED XLSX FOLDER ANALYSIS WITH DYNAMIC MARGINS", "PHASE")
     
     # Initialize cutting time accumulators
     oxygen_cutting_time = 0.0
     nitrogen_cutting_time = 0.0
     aluminum_nitrogen_cutting_time = 0.0
     total_material_cost = 0.0
+    
+    # Initialize margin tracking
+    file_margins = []
 
     for item in tree.get_children():
         tree.delete(item)
     thumbnail_imgs.clear()
     all_parts = []
+    
     folder_path = folder_var.get()
     if not folder_path:
-        messagebox.showerror("Error", "Please select a folder."); return
+        analysis_logger.log("No folder selected", "ERROR")
+        messagebox.showerror("Error", "Please select a folder.")
+        return
+    
+    analysis_logger.log(f"Analyzing folder: {folder_path}", "INFO")
+    
     try:
         files = [f for f in os.listdir(folder_path) if f.lower().endswith(".xlsx")]
-    except Exception:
+        analysis_logger.log(f"Found {len(files)} XLSX files", "INFO")
+    except Exception as e:
+        analysis_logger.log(f"Failed to list folder contents: {str(e)}", "ERROR")
         files = []
+    
     if not files:
-        messagebox.showerror("Error", "No .xlsx files in the selected folder."); return
+        analysis_logger.log("No XLSX files found in the selected folder", "ERROR")
+        messagebox.showerror("Error", "No .xlsx files in the selected folder.")
+        return
+    
+    # Check price lists
+    analysis_logger.log("CHECKING PRICE LISTS", "PHASE")
     if not _ensure_cenniki_loaded():
-        messagebox.showwarning("Warning", "Price lists not loaded — using 0.00, check Panel 3.")
+        analysis_logger.log("Price lists not loaded - calculations will use 0.00 values", "WARNING")
+        messagebox.showwarning("Warning", "Price lists not loaded – using 0.00, check Panel 3.")
 
     global op_cost_per_sheet, tech_per_order, add_costs_order
     op_cost_per_sheet = _parse_float(op_cost_entry.get()) or 0.0
     tech_per_order = _parse_float(tech_order_entry.get()) or 0.0
     add_costs_order = _parse_float(add_order_cost_entry.get()) or 0.0
+    
+    analysis_logger.log(f"Fixed costs: Op/sheet={op_cost_per_sheet:.2f}, Tech/order={tech_per_order:.2f}, Add={add_costs_order:.2f}", "INFO")
 
     total_sheets = 0
     total_parts_qty = 0
     groups = []
     subnr = 0
 
-    thumbnails = {}  # To store raw image data for each file if needed
+    thumbnails = {}
 
-    for fname in files:
+    # Process each file
+    analysis_logger.log("PROCESSING FILES WITH MARGIN CALCULATIONS", "PHASE")
+    
+    for file_idx, fname in enumerate(files, 1):
+        analysis_logger.log(f"Processing file {file_idx}/{len(files)}: {fname}", "INFO")
         path = os.path.join(folder_path, fname)
+        
+        file_material_margins = []
+        file_cutting_margins = []
+        
         try:
             wb = load_workbook(path, data_only=True)
+            
+            # Check for required sheets
             if "All Task List" not in wb.sheetnames:
+                analysis_logger.log(f"Missing 'All Task List' sheet in {fname}", "ERROR")
                 raise KeyError("No 'All Task List' sheet")
+            
             all_task = wb["All Task List"]
-            all_part_list = wb["All Parts List"]
-            file_thumbnails = {}
-            for img in all_part_list._images:
-                row = img.anchor._from.row + 1
-                col = img.anchor._from.col + 1
-                if col == 2:  # Column B
-                    img_data = img._data()
-                    file_thumbnails[row] = img_data
+            
+            if "All Parts List" not in wb.sheetnames:
+                analysis_logger.log(f"Missing 'All Parts List' sheet in {fname}", "WARNING")
+                all_part_list = None
+                file_thumbnails = {}
+            else:
+                all_part_list = wb["All Parts List"]
+                file_thumbnails = {}
+                thumbnail_count = 0
+                for img in all_part_list._images:
+                    row = img.anchor._from.row + 1
+                    col = img.anchor._from.col + 1
+                    if col == 2:  # Column B
+                        img_data = img._data()
+                        file_thumbnails[row] = img_data
+                        thumbnail_count += 1
+                if thumbnail_count > 0:
+                    analysis_logger.log(f"Found {thumbnail_count} thumbnails", "INFO")
+            
+            # Parse key data
             cut_time = parse_duration_to_hours(all_task['F4'].value)
+            if cut_time == 0:
+                analysis_logger.log(f"Cut time is zero or invalid in {fname}", "WARNING")
+            
             total_cut_length = get_total_cut_length(all_task, "Total")
+            if total_cut_length == 0:
+                analysis_logger.log(f"Total cut length is zero in {fname}", "WARNING")
+            
             material_name = all_task["B4"].value
             thickness_raw = all_task["C4"].value
             gas_raw = all_task["E4"].value
+            
             mat_norm = _norm_s(material_name)
             thk_val = _parse_float(thickness_raw)
             gas_key = _map_gas_to_key(gas_raw)
 
-            # Add accumulation of cutting time by gas type:
+            # Validate critical data
+            if not mat_norm:
+                analysis_logger.log(f"Material name missing in All Task List!B4", "ERROR")
+                raise ValueError("All Task List!B4 (Material) – no value")
+            if thk_val is None:
+                analysis_logger.log(f"Thickness value invalid in All Task List!C4", "ERROR")
+                raise ValueError("All Task List!C4 (Thickness(mm)) – no number")
+            if not gas_key:
+                analysis_logger.log(f"Gas type '{gas_raw}' not recognized (should be O/N)", "ERROR")
+                raise ValueError("All Task List!E4 (Gas) – unsupported gas type")
+            
+            analysis_logger.log(f"Material: {mat_norm}, Thickness: {thk_val}mm, Gas: {gas_key}", "INFO")
+
+            # NEW: Analyze plate sizes for material margin calculation
+            analysis_logger.log("Analyzing plate sizes for material margin calculation", "INFO")
+            
+            # Find header row (row 7 should contain "Plate Size(mm*mm)")
+            header_found = False
+            plate_size_col = None
+            sheets_qty_col = None
+            
+            for col in range(1, all_task.max_column + 1):
+                header_val = all_task.cell(row=7, column=col).value
+                if header_val and "Plate Size" in str(header_val):
+                    plate_size_col = col
+                    analysis_logger.log(f"Found 'Plate Size' in column {col}", "INFO")
+                if header_val and ("Sheets" in str(header_val) or col == 4):  # Column D is typically sheets
+                    sheets_qty_col = col
+                    analysis_logger.log(f"Found 'Sheets' quantity in column {col}", "INFO")
+            
+            if not plate_size_col:
+                analysis_logger.log("No 'Plate Size(mm*mm)' column found in row 7", "WARNING")
+                plate_size_col = 3  # Default to column C
+            
+            if not sheets_qty_col:
+                sheets_qty_col = 4  # Default to column D
+            
+            # Process data rows (starting from row 8)
+            row_idx = 8
+            file_total_area = 0.0
+            file_total_cutting = 0.0
+            row_count = 0
+            
+            while all_task.cell(row=row_idx, column=sheets_qty_col).value is not None:
+                try:
+                    # Get plate size and calculate area
+                    plate_size_str = all_task.cell(row=row_idx, column=plate_size_col).value
+                    plate_area_m2 = parse_plate_size(plate_size_str)
+                    
+                    # Get number of sheets
+                    sheets_qty = _parse_float(all_task.cell(row=row_idx, column=sheets_qty_col).value) or 0
+                    
+                    # Calculate cutting length for this row (from column H)
+                    row_cutting_length = _parse_float(all_task.cell(row=row_idx, column=8).value) or 0.0
+                    
+                    # Calculate margins for this row
+                    material_margin = calculate_material_margin(plate_area_m2)
+                    cutting_margin = calculate_cutting_margin(row_cutting_length)
+                    
+                    # Accumulate weighted averages
+                    file_material_margins.append((material_margin, sheets_qty))
+                    file_cutting_margins.append((cutting_margin, row_cutting_length))
+                    
+                    file_total_area += plate_area_m2 * sheets_qty
+                    file_total_cutting += row_cutting_length
+                    row_count += 1
+                    
+                    analysis_logger.log(f"Row {row_idx}: Size {plate_size_str} ({plate_area_m2:.4f}m²), "
+                                      f"Cutting {row_cutting_length:.1f}mm, "
+                                      f"Material margin {material_margin:.1f}%, "
+                                      f"Cutting margin {cutting_margin:.1f}%", "INFO")
+                    
+                except Exception as e:
+                    analysis_logger.log(f"Error processing row {row_idx}: {e}", "WARNING")
+                
+                row_idx += 1
+            
+            # Calculate average margins for this file
+            avg_file_material_margin = 0.0
+            avg_file_cutting_margin = 0.0
+            
+            if file_material_margins:
+                total_weight = sum(weight for margin, weight in file_material_margins)
+                if total_weight > 0:
+                    avg_file_material_margin = sum(margin * weight for margin, weight in file_material_margins) / total_weight
+            
+            if file_cutting_margins:
+                total_length = sum(length for margin, length in file_cutting_margins)
+                if total_length > 0:
+                    avg_file_cutting_margin = sum(margin * length for margin, length in file_cutting_margins) / total_length
+            
+            analysis_logger.log(f"File averages: Material margin {avg_file_material_margin:.1f}%, "
+                              f"Cutting margin {avg_file_cutting_margin:.1f}%", "SUCCESS")
+
+            # Accumulate cutting time by gas type
             if gas_key == "O":
                 oxygen_cutting_time += cut_time
+                analysis_logger.log(f"Added {cut_time:.2f}h to O₂ cutting time", "INFO")
             elif gas_key == "N":
                 if 'AL' in mat_norm:
                     aluminum_nitrogen_cutting_time += cut_time
+                    analysis_logger.log(f"Added {cut_time:.2f}h to AL N₂ cutting time", "INFO")
                 else:
                     nitrogen_cutting_time += cut_time
+                    analysis_logger.log(f"Added {cut_time:.2f}h to N₂ cutting time", "INFO")
 
-            if not mat_norm:
-                raise ValueError("All Task List!B4 (Material) — no value")
-            if thk_val is None:
-                raise ValueError("All Task List!C4 (Thickness(mm)) — no number")
-            if not gas_key:
-                raise ValueError("All Task List!E4 (Gas) — unsupported gas type")
-
+            # Look up prices
             base_price_per_kg = material_prices.get((mat_norm, thk_val), 0.0)
+            if base_price_per_kg == 0.0:
+                analysis_logger.log(f"No material price found for {mat_norm} {thk_val}mm - using 0.00", "WARNING")
+            else:
+                analysis_logger.log(f"Material price found for {mat_norm} {thk_val}mm - {base_price_per_kg} PLN/kg", "INFO")
+            
             base_rate_per_cut_length = cutting_prices.get((thk_val, mat_norm, gas_key), 0.0)
-            if base_rate_per_cut_length is 0.0:
-                messagebox.showwarning("Cutting cost not found")
-                return 0.0
-            if base_price_per_kg is 0.0:
-                messagebox.showwarning("Material not found")
-                return 0.0
-            price_per_kg, rate_per_cut_length, _dpdbg = apply_dynamic_pricing(
-                base_price_per_kg, base_rate_per_cut_length, thk_val, total_cut_length, cut_time
-            )
+            if base_rate_per_cut_length == 0.0:
+                analysis_logger.log(f"No cutting price found for {mat_norm} {thk_val}mm with {gas_key} - using 0.00", "WARNING")
+            else:
+                analysis_logger.log(f"Cutting price found for {mat_norm} {thk_val}mm with {gas_key} - {base_rate_per_cut_length} PLN/m", "INFO")
 
+            # Check Cost List sheet
             if "Cost List" not in wb.sheetnames:
+                analysis_logger.log(f"Missing 'Cost List' sheet in {fname}", "ERROR")
                 raise KeyError("No 'Cost List' sheet")
             cost_sheet = wb["Cost List"]
 
+            # Find utilization rate
             util_row = None
             for r in range(1, cost_sheet.max_row + 1):
                 for c in range(1, cost_sheet.max_column + 1):
@@ -993,21 +1272,29 @@ def analyze_xlsx_folder():
                         break
                 if util_row:
                     break
+            
             if util_row is None:
+                analysis_logger.log("'Average utilization:' not found in Cost List", "ERROR")
                 raise ValueError("Not found 'Average utilization:'")
+            
             util_str = cost_sheet.cell(row=util_row, column=11).value
             util_val = _parse_float(str(util_str).replace("%", "")) if util_str is not None else None
             utilization_rate = (util_val / 100.0) if (util_val is not None) else 0.0
+            
             if utilization_rate <= 0 or utilization_rate > 1:
+                analysis_logger.log(f"Average utilization out of range: {utilization_rate*100:.1f}%", "WARNING")
                 messagebox.showwarning("Warning", f"Average utilization out of range ({utilization_rate}).")
 
+            # Find Material Price row
             mat_price_row = None
             for r in range(1, cost_sheet.max_row + 1):
                 v = cost_sheet.cell(row=r, column=1).value
                 if v and "Material Price" in str(v):
                     mat_price_row = r
                     break
+            
             if mat_price_row is None:
+                analysis_logger.log("'Material Price' row not found in Cost List", "ERROR")
                 raise ValueError("No 'Material Price' row")
 
             def parse_num(cellv):
@@ -1019,32 +1306,43 @@ def analyze_xlsx_folder():
                 try:
                     return float(s or "0.0")
                 except Exception:
+                    analysis_logger.log(f"Failed to parse number: {cellv}", "WARNING")
                     return 0.0
 
-            rate_per_contour = parse_num(cost_sheet.cell(row=mat_price_row, column=7).value)  # G
-            rate_per_marking_length = parse_num(cost_sheet.cell(row=mat_price_row, column=9).value)  # I
-            rate_per_defilm_length = parse_num(cost_sheet.cell(row=mat_price_row, column=10).value)  # J
+            rate_per_contour = parse_num(cost_sheet.cell(row=mat_price_row, column=7).value)
+            rate_per_marking_length = parse_num(cost_sheet.cell(row=mat_price_row, column=9).value)
+            rate_per_defilm_length = parse_num(cost_sheet.cell(row=mat_price_row, column=10).value)
 
+            # Count sheets
             r_idx = 8
+            sheets_in_file = 0
             while all_task.cell(row=r_idx, column=4).value is not None:
                 v = all_task.cell(row=r_idx, column=4).value
                 if isinstance(v, (int, float)):
-                    total_sheets += int(v)
+                    sheets_in_file += int(v)
                 r_idx += 1
+            total_sheets += sheets_in_file
+            analysis_logger.log(f"Found {sheets_in_file} sheets in file", "INFO")
 
+            # Find parts data starting row
             start_row = None
             for r in range(1, cost_sheet.max_row + 1):
                 a_val = cost_sheet.cell(row=r, column=1).value
                 if a_val and isinstance(a_val, (int, float)):
                     start_row = r
                     break
+            
             if start_row is None:
-                raise ValueError("No starting row found (col. A — ID)")
+                analysis_logger.log("No starting row found for parts data (col. A – ID)", "ERROR")
+                raise ValueError("No starting row found (col. A – ID)")
 
+            # Process parts
             parts_for_group = []
             subnr += 1
             lp = 0
             row = start_row
+            parts_count = 0
+            
             while row <= cost_sheet.max_row and isinstance(cost_sheet.cell(row=row, column=1).value, (int, float)):
                 lp += 1
                 part_name = cost_sheet.cell(row=row, column=2).value
@@ -1057,35 +1355,20 @@ def analyze_xlsx_folder():
 
                 adj_weight = (weight / utilization_rate) if utilization_rate > 0 else weight
 
-                # Base costs
+                # Calculate base costs with 7% minimum margin
                 base_material_cost = adj_weight * base_price_per_kg
                 base_cut_cost = cut_length * base_rate_per_cut_length
                 base_total_part = base_material_cost + contours_qty * rate_per_contour + base_cut_cost + marking_length * rate_per_marking_length + defilm_length * rate_per_defilm_length
 
-                # Dynamic costs
-                material_cost = adj_weight * price_per_kg
-                cut_cost = cut_length * rate_per_cut_length
+                # Apply mandatory 7% minimum material cost increase
+                material_cost = adj_weight * base_price_per_kg * 1.07
+                cut_cost = cut_length * base_rate_per_cut_length
                 total_part = material_cost + contours_qty * rate_per_contour + cut_cost + marking_length * rate_per_marking_length + defilm_length * rate_per_defilm_length
 
                 thumbnail_data = None
-                all_parts_row = 2 + lp  # Assuming row 3 is first part
+                all_parts_row = 2 + lp
                 if all_parts_row in file_thumbnails:
                     thumbnail_data = file_thumbnails[all_parts_row]
-
-                thumbnail_photo = None
-                if thumbnail_data:
-                    try:
-                        pil_img = Image.open(io.BytesIO(thumbnail_data))
-                        max_w, max_h = 140, 70
-                        w, h = pil_img.size
-                        ratio = min(max_w / w, max_h / h, 1.0)
-                        new_w = int(w * ratio)
-                        new_h = int(h * ratio)
-                        pil_img = pil_img.resize((new_w, new_h), Image.LANCZOS)
-                        thumbnail_photo = ImageTk.PhotoImage(pil_img)
-                        thumbnail_imgs.append(thumbnail_photo)
-                    except Exception:
-                        pass
 
                 all_parts.append({
                     'id': lp,
@@ -1110,44 +1393,94 @@ def analyze_xlsx_folder():
                     'rate_per_contour': rate_per_contour,
                     'rate_per_marking_length': rate_per_marking_length,
                     'rate_per_defilm_length': rate_per_defilm_length,
-                    'thumb_data': thumbnail_data,  # Raw bytes
+                    'thumb_data': thumbnail_data,
+                    # NEW: Store calculated margins for this part
+                    'calculated_material_margin': avg_file_material_margin,
+                    'calculated_cutting_margin': avg_file_cutting_margin,
+                    'file_name': fname,
                 })
 
                 parts_for_group.append((part_name, float(f"{total_part:.2f}"),
                                         int(part_qty) if isinstance(part_qty, (int, float)) else 0))
                 total_parts_qty += int(part_qty) if isinstance(part_qty, (int, float)) else 0
+                parts_count += 1
                 row += 1
 
+            analysis_logger.log(f"Processed {parts_count} parts from {fname}", "SUCCESS")
             groups.append((material_name, thk_val, parts_for_group))
+            
+            # Store file margin data
+            file_margins.append({
+                'filename': fname,
+                'material_margin': avg_file_material_margin,
+                'cutting_margin': avg_file_cutting_margin,
+                'total_area': file_total_area,
+                'total_cutting': file_total_cutting,
+                'row_count': row_count
+            })
 
         except Exception as e:
+            analysis_logger.log(f"Critical error processing {fname}: {str(e)}", "ERROR")
             messagebox.showerror("Error", f"Error processing file {fname}: {e}")
             return
 
-    # distribution of overheads per piece
+    # Calculate overall average margins
+    analysis_logger.log("CALCULATING OVERALL AVERAGE MARGINS", "PHASE")
+    
+    if file_margins:
+        total_material_weight = sum(fm['total_area'] for fm in file_margins)
+        total_cutting_length = sum(fm['total_cutting'] for fm in file_margins)
+        
+        if total_material_weight > 0:
+            avg_material_margin = sum(fm['material_margin'] * fm['total_area'] for fm in file_margins) / total_material_weight
+        else:
+            avg_material_margin = 0.0
+        
+        if total_cutting_length > 0:
+            avg_cutting_margin = sum(fm['cutting_margin'] * fm['total_cutting'] for fm in file_margins) / total_cutting_length
+        else:
+            avg_cutting_margin = 0.0
+        
+        analysis_logger.log(f"Overall averages: Material {avg_material_margin:.1f}%, Cutting {avg_cutting_margin:.1f}%", "SUCCESS")
+        
+        # Update GUI display
+        avg_material_label.config(text=f"{avg_material_margin:.2f}%")
+        avg_cutting_label.config(text=f"{avg_cutting_margin:.2f}%")
+    else:
+        avg_material_margin = 0.0
+        avg_cutting_margin = 0.0
+
+    analysis_logger.log("CALCULATING OVERHEAD DISTRIBUTION", "PHASE")
+    
+    # Distribution of overheads per piece
     if total_parts_qty > 0:
         extra_per_part = (tech_per_order + add_costs_order) / total_parts_qty
         op_cost_per_part = (total_sheets * op_cost_per_sheet) / total_parts_qty
+        analysis_logger.log(f"Overhead per part: Tech+Add={extra_per_part:.2f}, Op={op_cost_per_part:.2f}", "INFO")
     else:
         extra_per_part = 0.0
         op_cost_per_part = 0.0
-    
+        analysis_logger.log("No parts found - overhead is 0", "WARNING")
+
     for p in all_parts:
         p['cost_per_unit'] += extra_per_part + op_cost_per_part
         p['base_cost_per_unit'] += extra_per_part + op_cost_per_part
         p['cost_per_unit'] = float(f"{p['cost_per_unit']:.2f}")
         p['base_cost_per_unit'] = float(f"{p['base_cost_per_unit']:.2f}")
 
-   # Calculate material costs for all parts
+    # Calculate material costs
+    analysis_logger.log("CALCULATING MATERIAL COSTS", "PHASE")
     for p in all_parts:
-        material_cost_per_part = p['adj_weight'] * p.get('base_price_per_kg', 0.0)
+        material_cost_per_part = p['adj_weight'] * p.get('base_price_per_kg', 0.0) * 1.07  # Include 7% minimum
         total_material_cost += material_cost_per_part * p['qty']
+    
+    analysis_logger.log(f"Total material cost: {format_pln(total_material_cost)} PLN", "INFO")
     
     # Update Panel 2 display fields
     update_cost_calculations()
 
-
-    # table
+    # Populate treeview
+    analysis_logger.log("POPULATING DATA TABLE", "PHASE")
     for i, p in enumerate(all_parts, start=1):
         item_values = (
             i,
@@ -1175,17 +1508,20 @@ def analyze_xlsx_folder():
                 thumb = ImageTk.PhotoImage(pil_img)
                 thumbnail_imgs.append(thumb)
                 opts['image'] = thumb
-            except Exception:
-                pass
+            except Exception as e:
+                analysis_logger.log(f"Failed to create thumbnail: {str(e)}", "WARNING")
 
         tree.insert('', 'end', **opts)
 
-    # Add total row to treeview
+    # Add total row
     total_order = sum(p['cost_per_unit'] * p['qty'] for p in all_parts)
     SetTotalPricePerOrder(total_order)
     total_row_iid = tree.insert('', 'end', values=('', '', 'Total', '', '', '', format_pln(total_order), '', '', '', ''))
+    
+    analysis_logger.log(f"Total order value: {format_pln(total_order)} PLN", "SUCCESS")
 
-   # Create merged groups (this code should already exist in your function)
+    # Create merged groups
+    analysis_logger.log("CREATING MERGED GROUPS", "PHASE")
     total_sum = 0.0
     merged_groups = []
     for (mat_name, thk, parts) in groups:
@@ -1196,12 +1532,24 @@ def analyze_xlsx_folder():
             total_sum += c * qty
         merged_groups.append((mat_name, thk, adj))
     
-    # NOW you can safely assign these variables
     last_groups = merged_groups
     last_total_cost = total_sum
     last_folder_path = folder_path
     
-    messagebox.showinfo("Analysis", "XLSX files analysis completed. Data in Panel 1 filled.")
+    # Final summary
+    analysis_logger.log("ANALYSIS COMPLETED WITH DYNAMIC MARGINS", "PHASE")
+    analysis_logger.log(f"Total sheets: {total_sheets}", "INFO")
+    analysis_logger.log(f"Total parts quantity: {total_parts_qty}", "INFO")
+    analysis_logger.log(f"O₂ cutting time: {oxygen_cutting_time:.2f}h", "INFO")
+    analysis_logger.log(f"N₂ cutting time: {nitrogen_cutting_time:.2f}h", "INFO")
+    analysis_logger.log(f"AL N₂ cutting time: {aluminum_nitrogen_cutting_time:.2f}h", "INFO")
+    analysis_logger.log(f"Average material margin: {avg_material_margin:.2f}%", "INFO")
+    analysis_logger.log(f"Average cutting margin: {avg_cutting_margin:.2f}%", "INFO")
+    analysis_logger.log(f"Files processed: {len(files)}", "SUCCESS")
+    
+    messagebox.showinfo("Analysis", "Enhanced XLSX analysis completed with dynamic margin calculations!\n"
+                                  f"Average material margin: {avg_material_margin:.1f}%\n"
+                                  f"Average cutting margin: {avg_cutting_margin:.1f}%")
 
 def get_next_offer_number():
     month_year = datetime.datetime.now().strftime("%m/%Y")
@@ -1256,14 +1604,22 @@ def generate_report():
         all_parts[idx]['bending_per_unit'] = _parse_float(vals[7]) or 0.0
         all_parts[idx]['additional_per_unit'] = _parse_float(vals[8]) or 0.0
 
-
     # Log start
     log_path = os.path.join(raporty_path, "cost_calculation_log.txt")
     with open(log_path, 'w', encoding='utf-8') as log:
-        log.write(f"Calculation Log - {datetime.datetime.now()}\n")
+        log.write(f"Enhanced Calculation Log with Dynamic Margins - {datetime.datetime.now()}\n")
         log.write(f"Folder: {folder_path}\n")
         log.write(f"Client: {customer_name}\n")
         log.write("Price sources: materials prices.xlsx, cutting prices.xlsx\n")
+        log.write(f"Average material margin applied: {avg_material_margin:.2f}%\n")
+        log.write(f"Average cutting margin applied: {avg_cutting_margin:.2f}%\n")
+        log.write("\nDynamic Margin Details:\n")
+        for fm in file_margins:
+            log.write(f"File: {fm['filename']}\n")
+            log.write(f"  Material margin: {fm['material_margin']:.2f}%\n")
+            log.write(f"  Cutting margin: {fm['cutting_margin']:.2f}%\n")
+            log.write(f"  Total area: {fm['total_area']:.4f}m²\n")
+            log.write(f"  Total cutting: {fm['total_cutting']:.1f}mm\n")
         log.write("\nCalculation Details:\n")
 
     # Generate DOCX
@@ -1367,6 +1723,13 @@ def generate_report():
     p.paragraph_format.space_before = Pt(12)
     for r in p.runs:
         r.font.size = Pt(14)
+    
+    # Add margin information to the document
+    margin_p = doc.add_paragraph(f"Calculated with dynamic margins: Material avg. {avg_material_margin:.1f}%, Cutting avg. {avg_cutting_margin:.1f}%")
+    for r in margin_p.runs:
+        r.font.size = Pt(9)
+        r.italic = True
+        
     if finishing_text:
         pf = doc.add_paragraph(finishing_text)
         for r in pf.runs:
@@ -1382,15 +1745,14 @@ def generate_report():
         messagebox.showerror("Error", f"Failed to save DOCX file:\n{e}")
         return
 
-
-    # Generate enhanced cost report XLSX
+    # Generate enhanced cost report XLSX with margin data
     cost_wb = Workbook()
     
-    # Sheet 1: Detailed Cost Breakdown with Thumbnail as column 2
+    # Sheet 1: Detailed Cost Breakdown with Margins
     detail_ws = cost_wb.active
-    detail_ws.title = "Detailed calculation"
+    detail_ws.title = "Detailed calculation with margins"
     
-    # Headers with Miniatura as second column
+    # Headers with additional margin columns
     headers = [
         "ID", "Miniatura", "Part name", "Material", "Thickness [mm]", "Quantity [pcs]",
         "Unit weight [kg]", "Adjusted weight [kg]", "Cutting length [m]",
@@ -1400,6 +1762,7 @@ def generate_report():
         "Marking cost [PLN]", "Defilm cost [PLN]",
         "Operational cost [PLN]", "Technology cost [PLN]",
         "Bending [PLN]", "Additional costs [PLN]",
+        "Calculated Material Margin [%]", "Calculated Cutting Margin [%]",
         "Unit cost [PLN]", "Total cost [PLN]"
     ]
     
@@ -1433,7 +1796,7 @@ def generate_report():
     row_num = 2
     for part in all_parts:
         # Calculate individual cost components
-        mat_cost = part['adj_weight'] * part.get('base_price_per_kg', 0.0)
+        mat_cost = part['adj_weight'] * part.get('base_price_per_kg', 0.0) * 1.07  # Include 7% minimum
         cut_cost = part.get('cut_length', 0.0) * part.get('base_rate_per_cut_length', 0.0)
         contour_cost = part.get('contours_qty', 0.0) * part.get('rate_per_contour', 0.0)
         marking_cost = part.get('marking_length', 0.0) * part.get('rate_per_marking_length', 0.0)
@@ -1455,7 +1818,7 @@ def generate_report():
                     op_cost_per_part + extra_per_part + bending_cost + part.get('additional_per_unit', 0.0))
         total_part_cost = unit_cost * part['qty']
         
-        # Write row data with proper column order (Miniatura as column 2)
+        # Write row data with margin information
         row_data = [
             part['id'],
             '',  # Placeholder for thumbnail
@@ -1480,6 +1843,8 @@ def generate_report():
             f"{extra_per_part:.2f}",
             f"{bending_cost:.2f}",
             f"{part.get('additional_per_unit', 0.0):.2f}",
+            f"{part.get('calculated_material_margin', 0.0):.2f}",  # NEW: Material margin
+            f"{part.get('calculated_cutting_margin', 0.0):.2f}",   # NEW: Cutting margin
             f"{unit_cost:.2f}",
             f"{total_part_cost:.2f}"
         ]
@@ -1505,7 +1870,7 @@ def generate_report():
     # Add totals row
     total_row = row_num
     detail_ws.cell(row=total_row, column=3, value="TOTAL SUM").font = Font(bold=True)
-    detail_ws.cell(row=total_row, column=25, value=f"{sum(cost_components.values()):.2f}").font = Font(bold=True)
+    detail_ws.cell(row=total_row, column=27, value=f"{sum(cost_components.values()):.2f}").font = Font(bold=True)
     
     # Autofit columns
     for column in detail_ws.columns:
@@ -1523,7 +1888,72 @@ def generate_report():
     # Set specific width for thumbnail column
     detail_ws.column_dimensions['B'].width = 12
     
-    # Sheet 2: Charts and Analysis with corrected data
+    # Sheet 2: Margin Analysis Summary
+    margin_ws = cost_wb.create_sheet("Margin Analysis")
+    
+    # Title
+    margin_ws['A1'] = "DYNAMIC MARGIN ANALYSIS SUMMARY"
+    margin_ws['A1'].font = Font(bold=True, size=16)
+    margin_ws.merge_cells('A1:F1')
+    
+    # File-by-file margin breakdown
+    margin_ws['A3'] = "File Name"
+    margin_ws['B3'] = "Material Margin [%]"
+    margin_ws['C3'] = "Cutting Margin [%]"
+    margin_ws['D3'] = "Total Area [m²]"
+    margin_ws['E3'] = "Total Cutting [mm]"
+    margin_ws['F3'] = "Rows Processed"
+    
+    for cell in ['A3', 'B3', 'C3', 'D3', 'E3', 'F3']:
+        margin_ws[cell].font = Font(bold=True)
+        margin_ws[cell].fill = PatternFill(start_color="D9D9D9", end_color="D9D9D9", fill_type="solid")
+    
+    row = 4
+    for fm in file_margins:
+        margin_ws.cell(row=row, column=1, value=fm['filename'])
+        margin_ws.cell(row=row, column=2, value=round(fm['material_margin'], 2))
+        margin_ws.cell(row=row, column=3, value=round(fm['cutting_margin'], 2))
+        margin_ws.cell(row=row, column=4, value=round(fm['total_area'], 4))
+        margin_ws.cell(row=row, column=5, value=round(fm['total_cutting'], 1))
+        margin_ws.cell(row=row, column=6, value=fm['row_count'])
+        row += 1
+    
+    # Overall averages
+    margin_ws.cell(row=row+1, column=1, value="OVERALL AVERAGES").font = Font(bold=True)
+    margin_ws.cell(row=row+2, column=1, value="Material Margin:")
+    margin_ws.cell(row=row+2, column=2, value=f"{avg_material_margin:.2f}%").font = Font(bold=True, color="008000")
+    margin_ws.cell(row=row+3, column=1, value="Cutting Margin:")
+    margin_ws.cell(row=row+3, column=2, value=f"{avg_cutting_margin:.2f}%").font = Font(bold=True, color="008000")
+    
+    # Configuration used
+    margin_ws.cell(row=row+5, column=1, value="MARGIN CALCULATION PARAMETERS").font = Font(bold=True)
+    margin_ws.cell(row=row+6, column=1, value="Min area for 100% material margin:")
+    margin_ws.cell(row=row+6, column=2, value=f"{_parse_float(min_area_var.get()):.3f} m²")
+    margin_ws.cell(row=row+7, column=1, value="Max area for 0% material margin:")
+    margin_ws.cell(row=row+7, column=2, value=f"{_parse_float(max_area_var.get()):.3f} m²")
+    margin_ws.cell(row=row+8, column=1, value="Min length for 250% cutting margin:")
+    margin_ws.cell(row=row+8, column=2, value=f"{_parse_float(min_cutting_var.get()):.1f} mm")
+    margin_ws.cell(row=row+9, column=1, value="Max length for 0% cutting margin:")
+    margin_ws.cell(row=row+9, column=2, value=f"{_parse_float(max_cutting_var.get()):.1f} mm")
+    
+    # Autofit columns for margin sheet
+    for column_cells in margin_ws.columns:
+        max_length = 0
+        column_letter = None
+        for cell in column_cells:
+            if hasattr(cell, 'column_letter'):
+                if column_letter is None:
+                    column_letter = cell.column_letter
+                try:
+                    if cell.value:
+                        max_length = max(max_length, len(str(cell.value)))
+                except:
+                    pass
+        if column_letter:
+            adjusted_width = min(max_length + 2, 40)
+            margin_ws.column_dimensions[column_letter].width = adjusted_width
+
+    # Sheet 3: Charts and Analysis (keep existing functionality)
     chart_ws = cost_wb.create_sheet("Charts and Analysis")
 
     # Title
@@ -1557,57 +1987,6 @@ def generate_report():
     chart_ws.cell(row=row, column=2, value=round(total_costs, 2)).font = Font(bold=True)
     chart_ws.cell(row=row, column=3, value=100.0).font = Font(bold=True)
     
-
-    # Autofit columns for "Charts and Analysis" sheet
-    for column_cells in chart_ws.columns:
-        max_length = 0
-        column_letter = None
-    
-        for cell in column_cells:
-            # Skip merged cells and get column letter from first regular cell
-            if hasattr(cell, 'column_letter'):
-                if column_letter is None:
-                    column_letter = cell.column_letter
-                try:
-                    if cell.value:
-                        max_length = max(max_length, len(str(cell.value)))
-                except:
-                    pass
-    
-        # Only set width if we found a valid column letter
-        if column_letter:
-            adjusted_width = min(max_length + 2, 40)  # Cap at 40 to avoid overly wide columns
-            chart_ws.column_dimensions[column_letter].width = adjusted_width
-
-    # Set minimum widths for specific columns
-    chart_ws.column_dimensions['A'].width = max(chart_ws.column_dimensions['A'].width, 20)  # Component names
-    chart_ws.column_dimensions['B'].width = max(chart_ws.column_dimensions['B'].width, 15)  # Values
-    chart_ws.column_dimensions['C'].width = max(chart_ws.column_dimensions['C'].width, 12)  # Percentages
-
-    # Pie Chart - Corrected with proper data reference
-    if len(active_components) > 0:
-        pie = PieChart()
-        pie.title = "Cost structure (%)"
-        pie.width = 20
-        pie.height = 15
-    
-        # Data range (values)
-        data = Reference(chart_ws, min_col=3, min_row=4, max_row=3+len(active_components))
-        # Categories (labels)
-        categories = Reference(chart_ws, min_col=1, min_row=4, max_row=3+len(active_components))
-    
-        pie.add_data(data, titles_from_data=False)
-        pie.set_categories(categories)
-    
-        # Data labels showing percentages
-        pie.dataLabels = DataLabelList()
-        pie.dataLabels.showPercent = True
-        pie.dataLabels.showCatName = True
-        pie.dataLabels.showSerName = False  # This removes "Serie1" from labels
-        pie.dataLabels.showVal = False  # Don't show raw values
-        chart_ws.add_chart(pie, "E3")
-        
-    
     # Financial Result Summary
     chart_ws['A' + str(row + 3)] = "FINANCIAL RESULT"
     chart_ws['A' + str(row + 3)].font = Font(bold=True, size=12)
@@ -1624,10 +2003,41 @@ def generate_report():
     chart_ws['B' + str(row + 7)] = f"{margin:.2f} PLN ({margin_percent:.1f}%)"
     chart_ws['B' + str(row + 7)].font = Font(bold=True, color="008000")
     
-    # Save the cost report
-    cost_wb.save(os.path.join(raporty_path, "Cost report.xlsx"))
+    # Add applied margins info
+    chart_ws['A' + str(row + 9)] = "APPLIED DYNAMIC MARGINS"
+    chart_ws['A' + str(row + 9)].font = Font(bold=True, size=12)
+    chart_ws['A' + str(row + 10)] = "Average material margin applied:"
+    chart_ws['B' + str(row + 10)] = f"{avg_material_margin:.2f}%"
+    chart_ws['B' + str(row + 10)].font = Font(bold=True, color="0066CC")
+    chart_ws['A' + str(row + 11)] = "Average cutting margin applied:"
+    chart_ws['B' + str(row + 11)] = f"{avg_cutting_margin:.2f}%"
+    chart_ws['B' + str(row + 11)].font = Font(bold=True, color="0066CC")
     
-    # Generate enhanced client report with professional styling
+    # Autofit columns for charts sheet
+    for column_cells in chart_ws.columns:
+        max_length = 0
+        column_letter = None
+        for cell in column_cells:
+            if hasattr(cell, 'column_letter'):
+                if column_letter is None:
+                    column_letter = cell.column_letter
+                try:
+                    if cell.value:
+                        max_length = max(max_length, len(str(cell.value)))
+                except:
+                    pass
+        if column_letter:
+            adjusted_width = min(max_length + 2, 40)
+            chart_ws.column_dimensions[column_letter].width = adjusted_width
+
+    # Set minimum widths for specific columns
+    chart_ws.column_dimensions['A'].width = max(chart_ws.column_dimensions['A'].width, 20)
+    chart_ws.column_dimensions['B'].width = max(chart_ws.column_dimensions['B'].width, 15)
+    
+    # Save the enhanced cost report
+    cost_wb.save(os.path.join(raporty_path, "Enhanced Cost Report with Margins.xlsx"))
+    
+    # Generate client report (keep existing functionality)
     client_wb = Workbook()
     client_ws = client_wb.active
     client_ws.title = "Offer for client"
@@ -1678,7 +2088,7 @@ def generate_report():
             right=Side(style='thin'),
             top=Side(style='thin'),
             bottom=Side(style='thin')
-        )  # <- This closing parenthesis was missing
+        )
     
     # Add data rows with alternating colors
     data_start_row = header_row + 1
@@ -1749,8 +2159,15 @@ def generate_report():
     cell.alignment = Alignment(horizontal="right")
     cell.border = Border(top=Side(style='double'), bottom=Side(style='double'))
     
+    # Add margin disclosure
+    margin_note_row = total_row + 2
+    client_ws.merge_cells(f'A{margin_note_row}:I{margin_note_row}')
+    client_ws[f'A{margin_note_row}'] = f"Calculated with optimized pricing based on project specifications (Avg. margins: Material {avg_material_margin:.1f}%, Cutting {avg_cutting_margin:.1f}%)"
+    client_ws[f'A{margin_note_row}'].font = Font(size=9, italic=True)
+    client_ws[f'A{margin_note_row}'].alignment = Alignment(wrap_text=True)
+    
     # Add closing text with disclaimers
-    disclaimer_start = total_row + 3
+    disclaimer_start = margin_note_row + 2
     client_ws.merge_cells(f'A{disclaimer_start}:I{disclaimer_start}')
     client_ws[f'A{disclaimer_start}'] = "IMPLEMENTATION CONDITIONS"
     client_ws[f'A{disclaimer_start}'].font = Font(bold=True, size=11)
@@ -1802,14 +2219,16 @@ def generate_report():
     client_ws.page_setup.fitToHeight = 0
     
     # Save the client report
-    client_wb.save(os.path.join(raporty_path, "Client report.xlsx"))
+    client_wb.save(os.path.join(raporty_path, "Client report with margins.xlsx"))
     
-    # Generate DOCX (keep existing code for Word document)
-    # ... [existing DOCX generation code] ...
-    
-    messagebox.showinfo("Success", "Reports generated in the Raporty folder.")
-    
-
+    messagebox.showinfo("Success", f"Enhanced reports generated in the Raporty folder!\n\n"
+                                  f"Dynamic margins applied:\n"
+                                  f"• Average material margin: {avg_material_margin:.2f}%\n"
+                                  f"• Average cutting margin: {avg_cutting_margin:.2f}%\n\n"
+                                  f"Files created:\n"
+                                  f"• DOCX offer\n"
+                                  f"• Enhanced cost report with margins.xlsx\n"
+                                  f"• Client report with margins.xlsx")
 
 # left buttons
 ttk.Button(buttons_frame, text="Analyze XLSX", command=analyze_xlsx_folder).pack(side="left", padx=5)
@@ -1826,7 +2245,7 @@ def set_sash_positions(attempt=1):
 
         h = panel_a.winfo_height()
         if h < 400 and attempt < 10:
-            # window is still expanding — try later
+            # window is still expanding – try later
             root.after(80, lambda: set_sash_positions(attempt+1)); return
 
         # layout: Panel1 ~ 50% height, Panel2 ~ 20%, Panel3 the rest (minsize protects against 0px)
@@ -1845,5 +2264,5 @@ def set_sash_positions(attempt=1):
 root.after_idle(set_sash_positions)
 
 # run
-root.geometry("1280x800")
+root.geometry("2100x1200")
 root.mainloop()
