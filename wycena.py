@@ -498,16 +498,50 @@ update_prices_button.grid(row=14, column=0, columnspan=4, pady=(10, 5))
 
 # Add margin update button - USER MUST CLICK THIS TO APPLY MARGINS
 update_margins_button = ttk.Button(subpanel2, text="UPDATE WITH DYNAMIC MARGINS", 
-                                   command=lambda: update_with_margins(),
-                                   style="TButton")
-update_margins_button.grid(row=15, column=0, columnspan=4, pady=(5, 5))
+                                   command=lambda: update_with_margins())
+update_margins_button.grid(row=15, column=0, columnspan=4, pady=(5, 10))
+
+# Make button more prominent with styling
+style.configure("Accent.TButton", background="#FF6B35", foreground="white", font=("Arial", 10, "bold"))
+style.map("Accent.TButton", background=[('active', '#FF8C5A')])
+update_margins_button.configure(style="Accent.TButton")
 
 # Configure column weights for proper resizing
 subpanel2.grid_columnconfigure(1, weight=1)
 subpanel2.grid_columnconfigure(3, weight=1)
 
+# Add a frame to hold the buttons and ensure they're visible
+button_frame = tk.Frame(subpanel2, bg="#2c2c2c")
+button_frame.grid(row=16, column=0, columnspan=4, pady=(10, 10), sticky="ew")
+
+# Add visual separator
+ttk.Separator(button_frame, orient='horizontal').pack(fill='x', pady=(0, 10))
+
+# Add label to make button purpose clear
+ttk.Label(button_frame, text="APPLY MARGINS TO PRICES:", font=("Arial", 10, "bold")).pack()
+
+# The UPDATE WITH DYNAMIC MARGINS button - clearly visible
+apply_margins_btn = tk.Button(
+    button_frame, 
+    text="UPDATE WITH DYNAMIC MARGINS", 
+    command=lambda: update_with_margins(),
+    bg="#4CAF50",
+    fg="white",
+    font=("Arial", 11, "bold"),
+    relief="raised",
+    bd=3,
+    cursor="hand2",
+    padx=20,
+    pady=10
+)
+apply_margins_btn.pack(pady=(5, 0))
+
+# Add helper text
+ttk.Label(button_frame, text="Click above to apply the proposed margins to all prices", 
+         font=("Arial", 9, "italic")).pack(pady=(2, 0))
+
 subpanel2.update_idletasks()
-panel2_height = subpanel2.winfo_reqheight() + 20
+panel2_height = subpanel2.winfo_reqheight() + 50  # Added extra height
 panel_a.add(subpanel2, height=panel2_height, minsize=panel2_height)
 
 # Add event handlers for automatic recalculation
@@ -517,6 +551,7 @@ al_nitrogen_rate_entry.bind('<FocusOut>', lambda e: update_cost_calculations() i
 op_cost_entry.bind('<FocusOut>', lambda e: update_cost_calculations() if all_parts else None)
 tech_order_entry.bind('<FocusOut>', lambda e: update_cost_calculations() if all_parts else None)
 add_order_cost_entry.bind('<FocusOut>', lambda e: update_cost_calculations() if all_parts else None)
+total_all_costs_entry.bind('<FocusOut>', lambda e: validate_total_entry() if all_parts else None)
 
 # --- PANEL 3 ---
 subpanel3 = tk.LabelFrame(panel_a, text="PANEL 3 – PRICE LISTS AND TESTS", bg="#2c2c2c", fg="white", padx=6, pady=6)
@@ -1190,7 +1225,7 @@ def analyze_xlsx_folder():
                     sheets_qty = _parse_float(all_task.cell(row=row_idx, column=sheets_qty_col).value) or 0
                     
                     # Calculate cutting length for this row (from column H)
-                    row_cutting_length = 1000*_parse_float(all_task.cell(row=row_idx, column=8).value) or 0.0
+                    row_cutting_length = _parse_float(all_task.cell(row=row_idx, column=8).value)*1000 or 0.0
                     
                     # Calculate margins for SUGGESTION ONLY
                     material_margin = calculate_material_margin(plate_area_m2)
@@ -1245,19 +1280,20 @@ def analyze_xlsx_folder():
             base_price_per_kg = material_prices.get((mat_norm, thk_val), 0.0)
             if base_price_per_kg == 0.0:
                 analysis_logger.log(f"No material price found for {mat_norm} {thk_val}mm - using 0.00", "WARNING")
+                messagebox.showerror("Warning", f"No material price found for {mat_norm} {thk_val}mm - using 0.00")
             else:
                 analysis_logger.log(f"Material price found: {base_price_per_kg} PLN/kg", "INFO")
-            
             base_rate_per_cut_length = cutting_prices.get((thk_val, mat_norm, gas_key), 0.0)
             if base_rate_per_cut_length == 0.0:
                 analysis_logger.log(f"No cutting price found for {mat_norm} {thk_val}mm with {gas_key} - using 0.00", "WARNING")
+                messagebox.showerror("Warning", f"No cutting price found for {mat_norm} {thk_val}mm with {gas_key} - using 0.00")
             else:
                 analysis_logger.log(f"Cutting price found: {base_rate_per_cut_length} PLN/m", "INFO")
-
             # Check Cost List sheet
             if "Cost List" not in wb.sheetnames:
                 analysis_logger.log(f"Missing 'Cost List' sheet in {fname}", "ERROR")
                 raise KeyError("No 'Cost List' sheet")
+                messagebox.showerror("Error", "No 'Cost List' sheet")
             cost_sheet = wb["Cost List"]
 
             # Find utilization rate
@@ -1293,7 +1329,7 @@ def analyze_xlsx_folder():
             if mat_price_row is None:
                 analysis_logger.log("'Material Price' row not found in Cost List", "ERROR")
                 raise ValueError("No 'Material Price' row")
-
+                messagebox.showerror("Warning", f"Material Price' row not found in Cost List")
             def parse_num(cellv):
                 if cellv is None:
                     return 0.0
@@ -1788,17 +1824,17 @@ def generate_report():
         extra_per_part = 0.0
         op_cost_per_part = 0.0
     
-    # Data for corrected charts
+    # Data for cost breakdown
     cost_components = {
         'Material': 0.0,
-        'Laser cutting': 0.0,
-        'Contours': 0.0,
-        'Marking': 0.0,
+        'Cięcie laserowe': 0.0,  # Changed to Polish
+        'Kontury': 0.0,
+        'Znakowanie': 0.0,
         'Defilm': 0.0,
-        'Operational costs': 0.0,
-        'Technology': 0.0,
-        'Bending': 0.0,
-        'Additional costs': 0.0
+        'Koszty operacyjne': 0.0,
+        'Technologia': 0.0,
+        'Gięcie': 0.0,
+        'Koszty dodatkowe': 0.0
     }
     
     row_num = 2
@@ -1813,14 +1849,14 @@ def generate_report():
         
         # Accumulate for charts (multiply by quantity for total costs)
         cost_components['Material'] += mat_cost * part['qty']
-        cost_components['Laser cutting'] += cut_cost * part['qty']
-        cost_components['Contours'] += contour_cost * part['qty']
-        cost_components['Marking'] += marking_cost * part['qty']
+        cost_components['Cięcie laserowe'] += cut_cost * part['qty']
+        cost_components['Kontury'] += contour_cost * part['qty']
+        cost_components['Znakowanie'] += marking_cost * part['qty']
         cost_components['Defilm'] += defilm_cost * part['qty']
-        cost_components['Operational costs'] += op_cost_per_part * part['qty']
-        cost_components['Technology'] += extra_per_part * part['qty']
-        cost_components['Bending'] += bending_cost * part['qty']
-        cost_components['Additional costs'] += part.get('additional_per_unit', 0.0) * part['qty']
+        cost_components['Koszty operacyjne'] += op_cost_per_part * part['qty']
+        cost_components['Technologia'] += extra_per_part * part['qty']
+        cost_components['Gięcie'] += bending_cost * part['qty']
+        cost_components['Koszty dodatkowe'] += part.get('additional_per_unit', 0.0) * part['qty']
         
         unit_cost = part['cost_per_unit']
         total_part_cost = unit_cost * part['qty']
@@ -1861,16 +1897,7 @@ def generate_report():
             if col >= 4:  # Numeric columns
                 cell.alignment = Alignment(horizontal="right")
         
-        # Add thumbnail in column 2 (B)
-        if part.get('thumb_data'):
-            try:
-                img = OpenpyxlImage(io.BytesIO(part['thumb_data']))
-                img.width = 60
-                img.height = 40
-                detail_ws.add_image(img, f'B{row_num}')
-                detail_ws.row_dimensions[row_num].height = 45
-            except Exception:
-                pass
+        # Skip thumbnail insertion for now to avoid corruption
         
         row_num += 1
     
@@ -1949,8 +1976,107 @@ def generate_report():
             adjusted_width = min(max_length + 2, 40)
             margin_ws.column_dimensions[column_letter].width = adjusted_width
 
+    # Sheet 3: Financial Analysis (ANALIZA FINANSOWA ZLECENIA)
+    analysis_ws = cost_wb.create_sheet("ANALIZA FINANSOWA ZLECENIA")
+    
+    # Title
+    analysis_ws['A1'] = "ANALIZA FINANSOWA ZLECENIA"
+    analysis_ws['A1'].font = Font(bold=True, size=14)
+    analysis_ws.merge_cells('A1:C1')
+    
+    # Cost breakdown table
+    analysis_ws['A3'] = "Składnik kosztów"
+    analysis_ws['B3'] = "Wartość [PLN]"
+    analysis_ws['C3'] = "Udział [%]"
+    
+    for cell in ['A3', 'B3', 'C3']:
+        analysis_ws[cell].font = Font(bold=True)
+        analysis_ws[cell].fill = PatternFill(start_color="D9D9D9", end_color="D9D9D9", fill_type="solid")
+    
+    # Filter out zero-value components for cleaner display
+    total_costs = sum(cost_components.values())
+    active_components = [(k, v) for k, v in cost_components.items() if v > 0]
+    
+    row = 4
+    for name, value in active_components:
+        analysis_ws.cell(row=row, column=1, value=name)
+        analysis_ws.cell(row=row, column=2, value=round(value, 2))
+        percentage = (value / total_costs * 100) if total_costs > 0 else 0
+        analysis_ws.cell(row=row, column=3, value=round(percentage, 1))
+        row += 1
+    
+    # Total row
+    analysis_ws.cell(row=row, column=1, value="RAZEM").font = Font(bold=True)
+    analysis_ws.cell(row=row, column=2, value=round(total_costs, 2)).font = Font(bold=True)
+    analysis_ws.cell(row=row, column=3, value=100.0).font = Font(bold=True)
+    
+    # Add separator
+    row += 2
+    
+    # Financial Result
+    analysis_ws.cell(row=row, column=1, value="WYNIK FINANSOWY").font = Font(bold=True, size=12)
+    row += 2
+    
+    client_price = total_price_per_order 
+    margin = client_price - total_costs
+    margin_percent = (margin / total_costs * 100) if total_costs > 0 else 0
+    
+    analysis_ws.cell(row=row, column=1, value="Koszty całkowite:")
+    analysis_ws.cell(row=row, column=2, value=f"{total_costs:.2f} PLN")
+    row += 1
+    
+    analysis_ws.cell(row=row, column=1, value="Cena dla klienta:")
+    analysis_ws.cell(row=row, column=2, value=f"{client_price:.2f} PLN")
+    row += 1
+    
+    analysis_ws.cell(row=row, column=1, value="Marża:")
+    analysis_ws.cell(row=row, column=2, value=f"{margin:.2f} PLN ({margin_percent:.1f}%)")
+    analysis_ws[f'B{row}'].font = Font(bold=True, color="008000")
+    
+    # Create pie chart for cost structure
+    if len(active_components) > 0:
+        pie = PieChart()
+        pie.title = "Struktura kosztów [%]"
+        
+        # Prepare data for chart
+        labels = Reference(analysis_ws, min_col=1, min_row=4, max_row=3+len(active_components))
+        data = Reference(analysis_ws, min_col=3, min_row=3, max_row=3+len(active_components))
+        
+        pie.add_data(data, titles_from_data=True)
+        pie.set_categories(labels)
+        pie.width = 15
+        pie.height = 10
+        
+        # Add data labels
+        pie.dataLabels = DataLabelList()
+        pie.dataLabels.showPercent = True
+        pie.dataLabels.showCatName = True
+        
+        # Position the chart
+        analysis_ws.add_chart(pie, "E3")
+    
+    # Autofit columns
+    for column_cells in analysis_ws.columns:
+        max_length = 0
+        column_letter = None
+        for cell in column_cells:
+            if hasattr(cell, 'column_letter'):
+                if column_letter is None:
+                    column_letter = cell.column_letter
+                try:
+                    if cell.value:
+                        max_length = max(max_length, len(str(cell.value)))
+                except:
+                    pass
+        if column_letter and column_letter in ['A', 'B', 'C']:
+            adjusted_width = min(max_length + 2, 30)
+            analysis_ws.column_dimensions[column_letter].width = adjusted_width
+
     # Save the enhanced cost report
-    cost_wb.save(os.path.join(raporty_path, "Cost Report.xlsx"))
+    try:
+        cost_wb.save(os.path.join(raporty_path, "Enhanced Cost Report with Margins.xlsx"))
+    except Exception as e:
+        messagebox.showerror("Error", f"Failed to save Enhanced Cost Report: {str(e)}")
     
     # Generate Client report with margins.xlsx
     client_wb = Workbook()
@@ -2096,13 +2222,13 @@ def generate_report():
     client_ws.page_setup.fitToHeight = 0
     
     # Save the client report
-    client_wb.save(os.path.join(raporty_path, "Client report.xlsx"))
+    client_wb.save(os.path.join(raporty_path, "Client report with margins.xlsx"))
     
     messagebox.showinfo("Success", f"Reports generated in the Raporty folder!\n\n"
                                   f"Files created:\n"
                                   f"• {fname}\n"
-                                  f"• Cost Report.xlsx\n"
-                                  f"• Client report.xlsx\n"
+                                  f"• Enhanced Cost Report with Margins.xlsx\n"
+                                  f"• Client report with margins.xlsx\n"
                                   f"• cost_calculation_log.txt")
 
 # left buttons
