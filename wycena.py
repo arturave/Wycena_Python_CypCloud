@@ -3,14 +3,14 @@
 
 """
 wycena.py - Main GUI script for analyzing XLSX files and generating cost reports.
-CORRECTED VERSION with Dynamic Margin Calculations
+CORRECTED VERSION with Fixed Excel Generation and Polish Number Format
 
 Key corrections:
-- Material margin: 250% to 0% for areas 0 to 1m²
-- Cutting margin: 200% to 0% for lengths 0 to 5000mm
-- Only 7% material margin applied automatically
-- User must click button to apply additional margins
-- Full report generation restored
+- Fixed Excel file corruption issues
+- Polish number notation (comma as decimal separator)
+- Using Excel formulas instead of static values
+- Enhanced logging with detailed cost breakdowns
+- Proper image handling in Excel files
 """
 
 import os
@@ -27,6 +27,7 @@ from openpyxl.drawing.image import Image as OpenpyxlImage
 from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
 from openpyxl.chart import PieChart, BarChart, Reference
 from openpyxl.chart.label import DataLabelList
+from openpyxl.utils import get_column_letter
 from docx import Document
 from docx.shared import Inches, RGBColor, Pt, Cm
 from docx.enum.text import WD_ALIGN_PARAGRAPH
@@ -57,6 +58,13 @@ def format_pln(value):
         except Exception:
             return "0,00"
 
+def format_excel_number(value):
+    """Format number for Excel with Polish notation (comma as decimal separator)"""
+    try:
+        return f"{float(value):.2f}".replace('.', ',')
+    except:
+        return "0,00"
+
 def sanitize_filename(name):
     """Sanitizes the file name by replacing disallowed characters."""
     for ch in r'< > : " / \ | ? *':
@@ -73,7 +81,7 @@ def _parse_float(val):
         return None
     if isinstance(val, (int, float)):
         return float(val)
-    s = str(val).strip().replace(" ", "").replace(",", ".")
+    s = str(val).strip().replace(" ", "").replace("\xa0", "").replace(",", ".")
     try:
         return float(s)
     except Exception:
@@ -1396,6 +1404,7 @@ def analyze_xlsx_folder():
                 material_cost = adj_weight * base_price_per_kg * 1.07
                 cut_cost = cut_length * base_rate_per_cut_length  # NO margin on cutting
                 
+                base_total_part = base_material_cost + contours_qty * rate_per_contour + base_cut_cost + marking_length * rate_per_marking_length + defilm_length * rate_per_defilm_length
                 total_part = material_cost + contours_qty * rate_per_contour + cut_cost + marking_length * rate_per_marking_length + defilm_length * rate_per_defilm_length
 
                 thumbnail_data = None
@@ -1411,7 +1420,7 @@ def analyze_xlsx_folder():
                     'thickness': thk_val,
                     'qty': int(part_qty) if isinstance(part_qty, (int, float)) else 0,
                     'cost_per_unit': float(f"{total_part:.2f}"),
-                    'base_cost_per_unit': float(f"{total_part:.2f}"),
+                    'base_cost_per_unit': float(f"{base_total_part:.2f}"),
                     'bending_per_unit': 0.0,
                     'additional_per_unit': 0.0,
                     'raw_weight': weight,
@@ -1431,6 +1440,16 @@ def analyze_xlsx_folder():
                     'calculated_cutting_margin': avg_file_cutting_margin,    # Store for later use
                     'file_name': fname,
                 })
+
+                # Log detailed cost breakdown for this part
+                analysis_logger.log(f"Part {lp} ({part_name}) cost breakdown:", "INFO")
+                analysis_logger.log(f"  Base material: {base_material_cost:.2f} PLN (weight: {adj_weight:.3f} kg @ {base_price_per_kg:.2f} PLN/kg)", "INFO")
+                analysis_logger.log(f"  Material with 7%: {material_cost:.2f} PLN", "INFO")
+                analysis_logger.log(f"  Cutting: {cut_cost:.2f} PLN (length: {cut_length:.2f} m @ {base_rate_per_cut_length:.2f} PLN/m)", "INFO")
+                analysis_logger.log(f"  Contours: {contours_qty * rate_per_contour:.2f} PLN", "INFO")
+                analysis_logger.log(f"  Marking: {marking_length * rate_per_marking_length:.2f} PLN", "INFO")
+                analysis_logger.log(f"  Defilm: {defilm_length * rate_per_defilm_length:.2f} PLN", "INFO")
+                analysis_logger.log(f"  Total per unit: {total_part:.2f} PLN", "INFO")
 
                 parts_for_group.append((part_name, float(f"{total_part:.2f}"),
                                         int(part_qty) if isinstance(part_qty, (int, float)) else 0))
@@ -1606,9 +1625,9 @@ def get_next_offer_number():
     except Exception:
         return "Laser/0001/12/2024"  # Fallback
 
-# FULL report generation function WITH Excel reports
+# FULL report generation function WITH Excel reports using FORMULAS and Polish notation
 def generate_report():
-    """Generate complete reports including DOCX and both Excel files"""
+    """Generate complete reports including DOCX and both Excel files with formulas"""
     if not all_parts:
         messagebox.showerror("Error", "No data for the report. First 'Analyze XLSX'.")
         return
@@ -1647,27 +1666,92 @@ def generate_report():
         all_parts[idx]['bending_per_unit'] = _parse_float(vals[7]) or 0.0
         all_parts[idx]['additional_per_unit'] = _parse_float(vals[8]) or 0.0
 
-    # Log start
+    # Enhanced log file with detailed cost breakdowns
     log_path = os.path.join(raporty_path, "cost_calculation_log.txt")
     with open(log_path, 'w', encoding='utf-8') as log:
         log.write(f"Enhanced Calculation Log with Dynamic Margins - {datetime.datetime.now()}\n")
+        log.write("="*80 + "\n")
         log.write(f"Folder: {folder_path}\n")
         log.write(f"Client: {customer_name}\n")
+        log.write(f"Offer: {offer_number}\n")
+        log.write("="*80 + "\n\n")
+        
+        log.write("MARGIN CALCULATION SUMMARY\n")
+        log.write("-"*40 + "\n")
         log.write("Price sources: materials prices.xlsx, cutting prices.xlsx\n")
         log.write(f"Average material margin calculated: {avg_material_margin:.2f}%\n")
         log.write(f"Average cutting margin calculated: {avg_cutting_margin:.2f}%\n")
         log.write(f"Applied material margin: {_parse_float(material_margin_var.get()):.2f}%\n")
-        log.write(f"Applied cutting margin: {_parse_float(cutting_margin_var.get()):.2f}%\n")
-        log.write("\nMargin Calculation Parameters:\n")
-        log.write(f"Material: 250% to 0% margin for areas 0 to 1m²\n")
-        log.write(f"Cutting: 200% to 0% margin for lengths 0 to 5000mm\n")
-        log.write("\nDynamic Margin Details:\n")
+        log.write(f"Applied cutting margin: {_parse_float(cutting_margin_var.get()):.2f}%\n\n")
+        
+        log.write("Margin Calculation Parameters:\n")
+        log.write(f"Material: 250% to 0% margin for areas {_parse_float(min_area_var.get()):.2f} to {_parse_float(max_area_var.get()):.2f} m²\n")
+        log.write(f"Cutting: 200% to 0% margin for lengths {_parse_float(min_cutting_var.get()):.0f} to {_parse_float(max_cutting_var.get()):.0f} mm\n\n")
+        
+        log.write("FILE-BY-FILE MARGIN ANALYSIS\n")
+        log.write("-"*40 + "\n")
         for fm in file_margins:
-            log.write(f"File: {fm['filename']}\n")
+            log.write(f"\nFile: {fm['filename']}\n")
             log.write(f"  Material margin: {fm['material_margin']:.2f}%\n")
             log.write(f"  Cutting margin: {fm['cutting_margin']:.2f}%\n")
-            log.write(f"  Total area: {fm['total_area']:.4f}m²\n")
-            log.write(f"  Total cutting: {fm['total_cutting']:.1f}mm\n")
+            log.write(f"  Total area: {fm['total_area']:.4f} m²\n")
+            log.write(f"  Total cutting: {fm['total_cutting']:.1f} mm\n")
+            log.write(f"  Rows processed: {fm['row_count']}\n")
+        
+        log.write("\n" + "="*80 + "\n")
+        log.write("DETAILED PART-BY-PART COST BREAKDOWN\n")
+        log.write("="*80 + "\n\n")
+        
+        # Get overhead values
+        op_cost_per_sheet = _parse_float(op_cost_entry.get()) or 0.0
+        tech_per_order = _parse_float(tech_order_entry.get()) or 0.0
+        add_costs_order = _parse_float(add_order_cost_entry.get()) or 0.0
+        
+        if total_parts_qty > 0:
+            extra_per_part = (tech_per_order + add_costs_order) / total_parts_qty
+            op_cost_per_part = (total_sheets * op_cost_per_sheet) / total_parts_qty
+        else:
+            extra_per_part = 0.0
+            op_cost_per_part = 0.0
+        
+        for part in all_parts:
+            log.write(f"Part ID: {part['id']} - {part['name']}\n")
+            log.write("-"*60 + "\n")
+            log.write(f"  File: {part.get('file_name', 'N/A')}\n")
+            log.write(f"  Material: {part['material']} {part['thickness']} mm\n")
+            log.write(f"  Quantity: {part['qty']} pcs\n")
+            log.write(f"  Raw weight: {part.get('raw_weight', 0.0):.3f} kg\n")
+            log.write(f"  Adjusted weight: {part.get('adj_weight', 0.0):.3f} kg\n\n")
+            
+            log.write("  Cost Components:\n")
+            mat_cost = part.get('adj_weight', 0.0) * part.get('base_price_per_kg', 0.0) * 1.07
+            log.write(f"    Material cost: {mat_cost:.2f} PLN\n")
+            log.write(f"      Weight: {part.get('adj_weight', 0.0):.3f} kg\n")
+            log.write(f"      Price: {part.get('base_price_per_kg', 0.0):.2f} PLN/kg\n")
+            log.write(f"      With 7% margin: {mat_cost:.2f} PLN\n")
+            
+            cut_cost = part.get('cut_length', 0.0) * part.get('base_rate_per_cut_length', 0.0)
+            log.write(f"    Cutting cost: {cut_cost:.2f} PLN\n")
+            log.write(f"      Length: {part.get('cut_length', 0.0):.2f} m\n")
+            log.write(f"      Rate: {part.get('base_rate_per_cut_length', 0.0):.2f} PLN/m\n")
+            
+            contour_cost = part.get('contours_qty', 0.0) * part.get('rate_per_contour', 0.0)
+            log.write(f"    Contours: {contour_cost:.2f} PLN\n")
+            log.write(f"      Quantity: {part.get('contours_qty', 0.0):.0f}\n")
+            log.write(f"      Rate: {part.get('rate_per_contour', 0.0):.2f} PLN/pc\n")
+            
+            marking_cost = part.get('marking_length', 0.0) * part.get('rate_per_marking_length', 0.0)
+            log.write(f"    Marking: {marking_cost:.2f} PLN\n")
+            
+            defilm_cost = part.get('defilm_length', 0.0) * part.get('rate_per_defilm_length', 0.0)
+            log.write(f"    Defilm: {defilm_cost:.2f} PLN\n")
+            
+            log.write(f"    Operational overhead: {op_cost_per_part:.2f} PLN\n")
+            log.write(f"    Technology overhead: {extra_per_part:.2f} PLN\n")
+            
+            log.write(f"\n  Final unit cost: {part['cost_per_unit']:.2f} PLN\n")
+            log.write(f"  Total for {part['qty']} pcs: {part['cost_per_unit'] * part['qty']:.2f} PLN\n")
+            log.write("\n")
 
     # Generate DOCX
     doc = Document()
@@ -1785,25 +1869,28 @@ def generate_report():
         messagebox.showerror("Error", f"Failed to save DOCX file:\n{e}")
         return
 
-    # Generate Enhanced Cost Report with Margins.xlsx
+    # Generate Enhanced Cost Report with Margins.xlsx with FORMULAS and Polish notation
     cost_wb = Workbook()
     
-    # Sheet 1: Detailed Cost Breakdown with Margins
-    detail_ws = cost_wb.active
-    detail_ws.title = "Detailed calculation with margins"
+    # Set workbook locale to Polish
+    cost_wb.iso_dates = False
     
-    # Headers with additional margin columns
+    # Sheet 1: Detailed Cost Breakdown with Thumbnail as column 2
+    detail_ws = cost_wb.active
+    detail_ws.title = "Szczegółowa kalkulacja"
+    
+    # Headers with Miniatura as second column - ALL IN POLISH
     headers = [
-        "ID", "Miniatura", "Part name", "Material", "Thickness [mm]", "Quantity [pcs]",
-        "Unit weight [kg]", "Adjusted weight [kg]", "Cutting length [m]",
-        "Number of contours", "Marking length [m]", "Defilm length [m]",
-        "Material price [PLN/kg]", "Cutting rate [PLN/m]", 
-        "Material cost [PLN]", "Cutting cost [PLN]", "Contours cost [PLN]",
-        "Marking cost [PLN]", "Defilm cost [PLN]",
-        "Operational cost [PLN]", "Technology cost [PLN]",
-        "Bending [PLN]", "Additional costs [PLN]",
-        "Calculated Material Margin [%]", "Calculated Cutting Margin [%]",
-        "Unit cost [PLN]", "Total cost [PLN]"
+        "ID", "Miniatura", "Nazwa części", "Materiał", "Grubość [mm]", "Ilość [szt]",
+        "Waga jednostkowa [kg]", "Waga skorygowana [kg]", "Długość cięcia [m]",
+        "Ilość konturów", "Długość znakowania [m]", "Długość odfoliowania [m]",
+        "Cena materiału [PLN/kg]", "Stawka cięcia [PLN/m]", 
+        "Koszt materiału [PLN]", "Koszt cięcia [PLN]", "Koszt konturów [PLN]",
+        "Koszt znakowania [PLN]", "Koszt odfoliowania [PLN]",
+        "Koszt operacyjny [PLN]", "Koszt technologii [PLN]",
+        "Gięcie [PLN]", "Koszty dodatkowe [PLN]",
+        "Obliczona marża mat. [%]", "Obliczona marża cięcia [%]",
+        "Koszt jednostkowy [PLN]", "Koszt całkowity [PLN]"
     ]
     
     for col, header in enumerate(headers, 1):
@@ -1813,10 +1900,6 @@ def generate_report():
         cell.alignment = Alignment(horizontal="center", vertical="center", wrap_text=True)
     
     # Calculate overhead distribution
-    op_cost_per_sheet = _parse_float(op_cost_entry.get()) or 0.0
-    tech_per_order = _parse_float(tech_order_entry.get()) or 0.0
-    add_costs_order = _parse_float(add_order_cost_entry.get()) or 0.0
-    
     if total_parts_qty > 0:
         extra_per_part = (tech_per_order + add_costs_order) / total_parts_qty
         op_cost_per_part = (total_sheets * op_cost_per_sheet) / total_parts_qty
@@ -1824,23 +1907,23 @@ def generate_report():
         extra_per_part = 0.0
         op_cost_per_part = 0.0
     
-    # Data for cost breakdown
+    # Data for corrected charts
     cost_components = {
-        'Material': 0.0,
-        'Cięcie laserowe': 0.0,  # Changed to Polish
+        'Materiał': 0.0,
+        'Cięcie laserowe': 0.0,
         'Kontury': 0.0,
         'Znakowanie': 0.0,
-        'Defilm': 0.0,
+        'Odfoliowanie': 0.0,
         'Koszty operacyjne': 0.0,
         'Technologia': 0.0,
         'Gięcie': 0.0,
         'Koszty dodatkowe': 0.0
     }
-    
+    tkw = 0
     row_num = 2
     for part in all_parts:
         # Calculate individual cost components
-        mat_cost = part['adj_weight'] * part.get('base_price_per_kg', 0.0) * 1.07  # Include 7% minimum
+        mat_cost = part['adj_weight'] * part.get('base_price_per_kg', 0.0) * 1.07
         cut_cost = part.get('cut_length', 0.0) * part.get('base_rate_per_cut_length', 0.0)
         contour_cost = part.get('contours_qty', 0.0) * part.get('rate_per_contour', 0.0)
         marking_cost = part.get('marking_length', 0.0) * part.get('rate_per_marking_length', 0.0)
@@ -1848,95 +1931,172 @@ def generate_report():
         bending_cost = part.get('bending_per_unit', 0.0)
         
         # Accumulate for charts (multiply by quantity for total costs)
-        cost_components['Material'] += mat_cost * part['qty']
+        cost_components['Materiał'] += mat_cost * part['qty']
         cost_components['Cięcie laserowe'] += cut_cost * part['qty']
         cost_components['Kontury'] += contour_cost * part['qty']
         cost_components['Znakowanie'] += marking_cost * part['qty']
-        cost_components['Defilm'] += defilm_cost * part['qty']
+        cost_components['Odfoliowanie'] += defilm_cost * part['qty']
         cost_components['Koszty operacyjne'] += op_cost_per_part * part['qty']
         cost_components['Technologia'] += extra_per_part * part['qty']
         cost_components['Gięcie'] += bending_cost * part['qty']
         cost_components['Koszty dodatkowe'] += part.get('additional_per_unit', 0.0) * part['qty']
         
-        unit_cost = part['cost_per_unit']
-        total_part_cost = unit_cost * part['qty']
+        # Write data with proper column order (Miniatura as column 2)
+        detail_ws.cell(row=row_num, column=1, value=part['id'])
+        detail_ws.cell(row=row_num, column=2, value='')  # Placeholder for thumbnail
+        detail_ws.cell(row=row_num, column=3, value=part['name'])
+        detail_ws.cell(row=row_num, column=4, value=part['material'])
+        detail_ws.cell(row=row_num, column=5, value=part['thickness'])
+        detail_ws.cell(row=row_num, column=6, value=part['qty'])
+        #detail_ws.cell(row=row_num, column=7, value=format_excel_number(part.get('raw_weight', 0.0)))
+        cell = detail_ws.cell(row=row_num, column=7, value=float(part.get('raw_weight', 0.0)))
+        cell.number_format = '#,##0.00'  
+        #detail_ws.cell(row=row_num, column=8, value=format_excel_number(part.get('adj_weight', 0.0)))
+        cell = detail_ws.cell(row=row_num, column=8, value=float(part.get('adj_weight', 0.0)))
+        cell.number_format = '#,##0.00'         
+        #detail_ws.cell(row=row_num, column=9, value=format_excel_number(part.get('cut_length', 0.0)))
+        cell = detail_ws.cell(row=row_num, column=9, value=float(part.get('cut_length', 0.0)))
+        cell.number_format = '#,##0.00'         
+        #detail_ws.cell(row=row_num, column=10, value=part.get('contours_qty', 0))
+        cell = detail_ws.cell(row=row_num, column=10, value=float(part.get('contours_qty', 0.0)))
+        cell.number_format = '#,##0'         
+        #detail_ws.cell(row=row_num, column=11, value=format_excel_number(part.get('marking_length', 0.0)))
+        cell = detail_ws.cell(row=row_num, column=11, value=float(part.get('marking_length', 0.0)))
+        cell.number_format = '#,##0.00'         
+        #detail_ws.cell(row=row_num, column=12, value=format_excel_number(part.get('defilm_length', 0.0)))
+        cell = detail_ws.cell(row=row_num, column=12, value=float(part.get('defilm_length', 0.0)))
+        cell.number_format = '#,##0.00'         
+        #detail_ws.cell(row=row_num, column=13, value=format_excel_number(part.get('base_price_per_kg', 0.0)))
+        cell = detail_ws.cell(row=row_num, column=13, value=float(part.get('base_price_per_kg', 0.0)))
+        cell.number_format = '#,##0.00'         
+        #detail_ws.cell(row=row_num, column=14, value=format_excel_number(part.get('base_rate_per_cut_length', 0.0)))
+        cell = detail_ws.cell(row=row_num, column=14, value=float(part.get('base_rate_per_cut_length', 0.0)))
+        cell.number_format = '#,##0.00'         
         
-        # Write row data with margin information
-        row_data = [
-            part['id'],
-            '',  # Placeholder for thumbnail
-            part['name'],
-            part['material'],
-            part['thickness'],
-            part['qty'],
-            f"{part.get('raw_weight', 0.0):.3f}",
-            f"{part.get('adj_weight', 0.0):.3f}",
-            f"{part.get('cut_length', 0.0):.2f}",
-            part.get('contours_qty', 0),
-            f"{part.get('marking_length', 0.0):.2f}",
-            f"{part.get('defilm_length', 0.0):.2f}",
-            f"{part.get('base_price_per_kg', 0.0):.2f}",
-            f"{part.get('base_rate_per_cut_length', 0.0):.2f}",
-            f"{mat_cost:.2f}",
-            f"{cut_cost:.2f}",
-            f"{contour_cost:.2f}",
-            f"{marking_cost:.2f}",
-            f"{defilm_cost:.2f}",
-            f"{op_cost_per_part:.2f}",
-            f"{extra_per_part:.2f}",
-            f"{bending_cost:.2f}",
-            f"{part.get('additional_per_unit', 0.0):.2f}",
-            f"{part.get('calculated_material_margin', 0.0):.2f}",  # Material margin
-            f"{part.get('calculated_cutting_margin', 0.0):.2f}",   # Cutting margin
-            f"{unit_cost:.2f}",
-            f"{total_part_cost:.2f}"
-        ]
+        # Cost formulas using Excel references
+        col_letter = get_column_letter
+        # Material cost = raw cost
+        #detail_ws.cell(row=row_num, column=15).value = f"={col_letter(8)}{row_num}*{col_letter(13)}{row_num}"
+        cell = detail_ws.cell(row=row_num, column=15, value = f"={col_letter(8)}{row_num}*{col_letter(13)}{row_num}")
+        cell.number_format = '#,##0.00'         
+        # Cutting cost = Cutting length * Cutting rate
+        #detail_ws.cell(row=row_num, column=16).value = f"={col_letter(9)}{row_num}*{col_letter(14)}{row_num}"
+        cell = detail_ws.cell(row=row_num, column=16, value = f"={col_letter(9)}{row_num}*{col_letter(14)}{row_num}")
+        cell.number_format = '#,##0.00'         
+        # Contours cost = Contours qty * rate (need to add rate as constant or reference)
+        #detail_ws.cell(row=row_num, column=17, value=format_excel_number(contour_cost))
+        cell = detail_ws.cell(row=row_num, column=17, value = float(contour_cost))
+        cell.number_format = '#,##0.00'         
+        # Marking cost
+        #detail_ws.cell(row=row_num, column=18, value=format_excel_number(marking_cost))
+        cell = detail_ws.cell(row=row_num, column=18, value = float(marking_cost))
+        cell.number_format = '#,##0.00'         
+        # Defilm cost  
+        #detail_ws.cell(row=row_num, column=19, value=format_excel_number(defilm_cost))
+        cell = detail_ws.cell(row=row_num, column=19, value = float(defilm_cost))
+        cell.number_format = '#,##0.00'         
+        # Operational cost
+        #detail_ws.cell(row=row_num, column=20, value=format_excel_number(op_cost_per_part))
+        cell = detail_ws.cell(row=row_num, column=20, value = float(op_cost_per_part))
+        cell.number_format = '#,##0.00'         
+        # Technology cost
+        #detail_ws.cell(row=row_num, column=21, value=format_excel_number(extra_per_part))
+        cell = detail_ws.cell(row=row_num, column=21, value = float(extra_per_part))
+        cell.number_format = '#,##0.00'         
+        # Bending
+        #detail_ws.cell(row=row_num, column=22, value=format_excel_number(bending_cost))
+        cell = detail_ws.cell(row=row_num, column=22, value = float(bending_cost))
+        cell.number_format = '#,##0.00'         
+        # Additional
+        #detail_ws.cell(row=row_num, column=23, value=format_excel_number(part.get('additional_per_unit', 0.0)))
+        cell = detail_ws.cell(row=row_num, column=23, value = float(part.get('additional_per_unit', 0.0)))
+        cell.number_format = '#,##0.00'         
+        # Margins
+        #detail_ws.cell(row=row_num, column=24, value=format_excel_number(part.get('calculated_material_margin', 0.0)))
+        cell = detail_ws.cell(row=row_num, column=24, value = float(part.get('calculated_material_margin', 0.0)))
+        cell.number_format = '#,##0.00'         
+        #detail_ws.cell(row=row_num, column=25, value=format_excel_number(part.get('calculated_cutting_margin', 0.0)))
+        cell = detail_ws.cell(row=row_num, column=25, value = float(part.get('calculated_cutting_margin', 0.0)))
+        cell.number_format = '#,##0.00'         
         
-        for col, value in enumerate(row_data, 1):
-            cell = detail_ws.cell(row=row_num, column=col, value=value)
-            if col >= 4:  # Numeric columns
+        # Unit cost formula = SUM of all cost components
+        #detail_ws.cell(row=row_num, column=26).value = f"=SUM({col_letter(15)}{row_num}:{col_letter(23)}{row_num})"
+        cell = detail_ws.cell(row=row_num, column=26, value = f"=SUM({col_letter(15)}{row_num}:{col_letter(23)}{row_num})")
+        cell.number_format = '#,##0.00'         
+     
+        # Total cost formula = Unit cost * Quantity
+        #detail_ws.cell(row=row_num, column=27).value = f"={col_letter(26)}{row_num}*{col_letter(6)}{row_num}"
+        cell = detail_ws.cell(row=row_num, column=27, value = f"={col_letter(26)}{row_num}*{col_letter(6)}{row_num}")
+        cell.number_format = '#,##0.00'         
+     
+        # Add thumbnail in column 2 (B)
+        if part.get('thumb_data'):
+            try:
+                img = OpenpyxlImage(io.BytesIO(part['thumb_data']))
+                img.width = 60
+                img.height = 40
+                detail_ws.add_image(img, f'B{row_num}')
+                detail_ws.row_dimensions[row_num].height = 45
+            except Exception as e:
+                analysis_logger.log(f"Failed to add thumbnail for part {part['id']}: {str(e)}", "WARNING")
+        
+        # Format cells
+        for col in range(1, 28):
+            cell = detail_ws.cell(row=row_num, column=col)
+            if col >= 4:  # Numeric columns (after material name)
                 cell.alignment = Alignment(horizontal="right")
-        
-        # Skip thumbnail insertion for now to avoid corruption
-        
+        tkw = tkw + float(part.get('base_cost_per_unit',0.0))*float(part.get('qty',0.0))
         row_num += 1
     
-    # Add totals row
+    # Add totals row with formulas
     total_row = row_num
-    detail_ws.cell(row=total_row, column=3, value="TOTAL SUM").font = Font(bold=True)
-    detail_ws.cell(row=total_row, column=27, value=f"{sum(cost_components.values()):.2f}").font = Font(bold=True)
+    detail_ws.cell(row=total_row, column=3, value="SUMA").font = Font(bold=True)
     
-    # Autofit columns
+    # Total cost formula
+    #detail_ws.cell(row=total_row, column=27).value = f"=SUM({col_letter(27)}2:{col_letter(27)}{row_num-1})"
+    detail_ws.cell(row=total_row, column=27).font = Font(bold=True)
+    cell = detail_ws.cell(row=total_row, column=27, value = f"=SUM({col_letter(27)}2:{col_letter(27)}{row_num-1})")
+    cell.number_format = '#,##0.00'         
+    # Autofit columns with specific widths
+    column_widths = {
+        'A': 8,   # ID
+        'B': 12,  # Miniatura (thumbnail)
+        'C': 25,  # Nazwa części
+        'D': 15,  # Materiał
+    }
+    
+    for col_letter_key, width in column_widths.items():
+        detail_ws.column_dimensions[col_letter_key].width = width
+    
+    # Auto-width for remaining columns
     for column in detail_ws.columns:
-        max_length = 0
         column_letter = column[0].column_letter
-        for cell in column:
-            try:
-                if cell.value:
-                    max_length = max(max_length, len(str(cell.value)))
-            except:
-                pass
-        adjusted_width = min(max_length + 2, 30)
-        detail_ws.column_dimensions[column_letter].width = adjusted_width
-    
-    # Set specific width for thumbnail column
-    detail_ws.column_dimensions['B'].width = 12
+        if column_letter not in column_widths:
+            max_length = 0
+            for cell in column:
+                try:
+                    if cell.value:
+                        max_length = max(max_length, len(str(cell.value)))
+                except:
+                    pass
+            adjusted_width = min(max_length + 2, 30)
+            detail_ws.column_dimensions[column_letter].width = adjusted_width
     
     # Sheet 2: Margin Analysis Summary
-    margin_ws = cost_wb.create_sheet("Margin Analysis")
+    margin_ws = cost_wb.create_sheet("Analiza marż")
     
     # Title
-    margin_ws['A1'] = "DYNAMIC MARGIN ANALYSIS SUMMARY"
+    margin_ws['A1'] = "ANALIZA DYNAMICZNYCH MARŻ - PODSUMOWANIE"
     margin_ws['A1'].font = Font(bold=True, size=16)
     margin_ws.merge_cells('A1:F1')
     
     # File-by-file margin breakdown
-    margin_ws['A3'] = "File Name"
-    margin_ws['B3'] = "Material Margin [%]"
-    margin_ws['C3'] = "Cutting Margin [%]"
-    margin_ws['D3'] = "Total Area [m²]"
-    margin_ws['E3'] = "Total Cutting [mm]"
-    margin_ws['F3'] = "Rows Processed"
+    margin_ws['A3'] = "Nazwa pliku"
+    margin_ws['B3'] = "Marża materiałowa [%]"
+    margin_ws['C3'] = "Marża cięcia [%]"
+    margin_ws['D3'] = "Powierzchnia całkowita [m²]"
+    margin_ws['E3'] = "Długość cięcia całkowita [mm]"
+    margin_ws['F3'] = "Liczba przetworzonych wierszy"
     
     for cell in ['A3', 'B3', 'C3', 'D3', 'E3', 'F3']:
         margin_ws[cell].font = Font(bold=True)
@@ -1945,19 +2105,33 @@ def generate_report():
     row = 4
     for fm in file_margins:
         margin_ws.cell(row=row, column=1, value=fm['filename'])
-        margin_ws.cell(row=row, column=2, value=round(fm['material_margin'], 2))
-        margin_ws.cell(row=row, column=3, value=round(fm['cutting_margin'], 2))
-        margin_ws.cell(row=row, column=4, value=round(fm['total_area'], 4))
-        margin_ws.cell(row=row, column=5, value=round(fm['total_cutting'], 1))
+        #margin_ws.cell(row=row, column=2, value=float(fm['material_margin']))
+        cell = margin_ws.cell(row=row, column=2, value=float(fm['material_margin']))
+        cell.number_format = '#,##0.00'  
+        #margin_ws.cell(row=row, column=3, value=float(fm['cutting_margin']))
+        cell = margin_ws.cell(row=row, column=3, value=float(fm['cutting_margin']))
+        cell.number_format = '#,##0.00'  
+        #margin_ws.cell(row=row, column=4, value=float(fm['total_area']))
+        cell = margin_ws.cell(row=row, column=4, value=float(fm['total_area']))
+        cell.number_format = '#,##0.00'  
+        #margin_ws.cell(row=row, column=5, value=float(fm['total_cutting']))
+        cell = margin_ws.cell(row=row, column=5, value=float(fm['total_cutting']))
+        cell.number_format = '#,##0.00'  
         margin_ws.cell(row=row, column=6, value=fm['row_count'])
         row += 1
     
-    # Overall averages
-    margin_ws.cell(row=row+1, column=1, value="OVERALL AVERAGES").font = Font(bold=True)
-    margin_ws.cell(row=row+2, column=1, value="Material Margin:")
-    margin_ws.cell(row=row+2, column=2, value=f"{avg_material_margin:.2f}%").font = Font(bold=True, color="008000")
-    margin_ws.cell(row=row+3, column=1, value="Cutting Margin:")
-    margin_ws.cell(row=row+3, column=2, value=f"{avg_cutting_margin:.2f}%").font = Font(bold=True, color="008000")
+    # Overall averages with formulas
+    margin_ws.cell(row=row+1, column=1, value="ŚREDNIE WARTOŚCI").font = Font(bold=True)
+    margin_ws.cell(row=row+2, column=1, value="Średnia marża materiałowa:")
+    #margin_ws.cell(row=row+2, column=2, value=format_excel_number(avg_material_margin) + "%").font = Font(bold=True, color="008000")
+    cell = margin_ws.cell(row=row+2, column=2, value=float(avg_material_margin/100))
+    cell.font = Font(bold=True, color="008000")
+    cell.number_format = '0.00 %'  
+    margin_ws.cell(row=row+3, column=1, value="Średnia marża cięcia:")
+    #margin_ws.cell(row=row+3, column=2, value=format_excel_number(avg_cutting_margin) + "%").font = Font(bold=True, color="008000")
+    cell = margin_ws.cell(row=row+3, column=2, value=float(avg_cutting_margin/100))
+    cell.font = Font(bold=True, color="008000")
+    cell.number_format = '0.00 %'  
     
     # Autofit columns for margin sheet
     for column_cells in margin_ws.columns:
@@ -1994,21 +2168,27 @@ def generate_report():
         analysis_ws[cell].fill = PatternFill(start_color="D9D9D9", end_color="D9D9D9", fill_type="solid")
     
     # Filter out zero-value components for cleaner display
-    total_costs = sum(cost_components.values())
+    total_costs = tkw #sum(cost_components.values())
     active_components = [(k, v) for k, v in cost_components.items() if v > 0]
     
     row = 4
     for name, value in active_components:
         analysis_ws.cell(row=row, column=1, value=name)
-        analysis_ws.cell(row=row, column=2, value=round(value, 2))
-        percentage = (value / total_costs * 100) if total_costs > 0 else 0
-        analysis_ws.cell(row=row, column=3, value=round(percentage, 1))
+        cell = analysis_ws.cell(row=row, column=2, value=float(value))
+        cell.number_format = '#,##0.00'  
+        # Percentage formula
+        cell = analysis_ws.cell(row=row, column=3, value=f"=B{row}/{total_costs}*100")
+        cell.number_format = '#,##0.00'  
         row += 1
     
-    # Total row
+    # Total row with formula
     analysis_ws.cell(row=row, column=1, value="RAZEM").font = Font(bold=True)
-    analysis_ws.cell(row=row, column=2, value=round(total_costs, 2)).font = Font(bold=True)
-    analysis_ws.cell(row=row, column=3, value=100.0).font = Font(bold=True)
+    cell = analysis_ws.cell(row=row, column=2, value=f"=SUM(B4:B{row-1})")
+    cell.number_format = '#,##0.00'  
+    analysis_ws.cell(row=row, column=2).font = Font(bold=True)
+    cell = analysis_ws.cell(row=row, column=3, value=100)
+    cell.number_format = '#,##0.00'  
+    analysis_ws.cell(row=row, column=3).font = Font(bold=True)
     
     # Add separator
     row += 2
@@ -2017,20 +2197,29 @@ def generate_report():
     analysis_ws.cell(row=row, column=1, value="WYNIK FINANSOWY").font = Font(bold=True, size=12)
     row += 2
     
-    client_price = total_price_per_order 
-    margin = client_price - total_costs
-    margin_percent = (margin / total_costs * 100) if total_costs > 0 else 0
+    client_price = total_price_per_order
     
     analysis_ws.cell(row=row, column=1, value="Koszty całkowite:")
-    analysis_ws.cell(row=row, column=2, value=f"{total_costs:.2f} PLN")
+    cell = analysis_ws.cell(row=row, column=2, value=float(total_costs))
+    cell.number_format = '#,##0.00 PLN'  
     row += 1
     
     analysis_ws.cell(row=row, column=1, value="Cena dla klienta:")
-    analysis_ws.cell(row=row, column=2, value=f"{client_price:.2f} PLN")
+    cell = analysis_ws.cell(row=row, column=2, value=float(client_price))
+    cell.number_format = '#,##0.00 PLN'  
     row += 1
     
     analysis_ws.cell(row=row, column=1, value="Marża:")
-    analysis_ws.cell(row=row, column=2, value=f"{margin:.2f} PLN ({margin_percent:.1f}%)")
+    # Margin formula
+    cell = analysis_ws.cell(row=row, column=2, value=f"=B{row-1}-B{row-2}")
+    cell.number_format = '#,##0.00 PLN'  
+    analysis_ws[f'B{row}'].font = Font(bold=True, color="008000")
+    row += 1
+    
+    analysis_ws.cell(row=row, column=1, value="Marża [%]:")
+    # Margin percentage formula
+    cell = analysis_ws.cell(row=row, column=2, value=f"=B{row-1}/B{row-3}")
+    cell.number_format = '0.00%'  
     analysis_ws[f'B{row}'].font = Font(bold=True, color="008000")
     
     # Create pie chart for cost structure
@@ -2074,7 +2263,8 @@ def generate_report():
 
     # Save the enhanced cost report
     try:
-        cost_wb.save(os.path.join(raporty_path, "Enhanced Cost Report with Margins.xlsx"))
+        fname = f"Raport_kosztowy_{offer_number.replace('/', '-')}.xlsx"
+        cost_wb.save(os.path.join(raporty_path, fname))
     except Exception as e:
         messagebox.showerror("Error", f"Failed to save Enhanced Cost Report: {str(e)}")
     
@@ -2083,7 +2273,7 @@ def generate_report():
     client_ws = client_wb.active
     client_ws.title = "Offer for client"
     
-    # Add header with company info and logo space
+    # Add header with company info
     client_ws.merge_cells('A1:I1')
     client_ws['A1'] = "LP KONSTAL Sp. z o.o."
     client_ws['A1'].font = Font(bold=True, size=16, color="366092")
@@ -2091,19 +2281,19 @@ def generate_report():
     
     # Add offer details
     client_ws.merge_cells('A3:D3')
-    client_ws['A3'] = f"OFFER NO: {offer_number}"
+    client_ws['A3'] = f"OFERTA NR: {offer_number}"
     client_ws['A3'].font = Font(bold=True, size=14)
     
     client_ws.merge_cells('F3:I3')
-    client_ws['F3'] = f"Date: {datetime.datetime.now().strftime('%d.%m.%Y')}"
+    client_ws['F3'] = f"Data: {datetime.datetime.now().strftime('%d.%m.%Y')}"
     client_ws['F3'].alignment = Alignment(horizontal="right")
     
     client_ws.merge_cells('A4:D4')
-    client_ws['A4'] = f"For: {customer_name}"
+    client_ws['A4'] = f"Dla: {customer_name}"
     client_ws['A4'].font = Font(size=12)
     
     client_ws.merge_cells('F4:I4')
-    client_ws['F4'] = f"Valid until: {validity}"
+    client_ws['F4'] = f"Ważna do: {validity}"
     client_ws['F4'].alignment = Alignment(horizontal="right")
     
     # Add a separator row
@@ -2113,7 +2303,7 @@ def generate_report():
     
     # Column headers for client report
     headers = [
-        "ID", "Miniatura", "Part name", "Material", 
+        "ID", "Part name", "Material", 
         "Thickness [mm]", "Unit weight [kg]", 
         "Quantity [pcs]", "Unit cost [PLN]", "Total cost [PLN]"
     ]
@@ -2142,75 +2332,69 @@ def generate_report():
         fill_color = "F2F2F2" if idx % 2 == 0 else "FFFFFF"
         
         unit_total = part['cost_per_unit'] + part['bending_per_unit'] + part['additional_per_unit']
-        total_part = unit_total * part['qty']
-        client_total += total_part
         
         # ID
-        cell = client_ws.cell(row=row_num, column=1, value=part['id'])
+        cell = client_ws.cell(row=row_num, column=1, value=float(part['id']))
         cell.fill = PatternFill(start_color=fill_color, end_color=fill_color, fill_type="solid")
         cell.alignment = Alignment(horizontal="center")
         cell.border = Border(left=Side(style='thin'), right=Side(style='thin'))
+        cell.number_format = '#,##0.00'
         
-        # Miniatura (column 2)
-        cell = client_ws.cell(row=row_num, column=2, value='')
-        cell.fill = PatternFill(start_color=fill_color, end_color=fill_color, fill_type="solid")
-        if part.get('thumb_data'):
-            try:
-                img = OpenpyxlImage(io.BytesIO(part['thumb_data']))
-                img.width = 50
-                img.height = 35
-                client_ws.add_image(img, f'B{row_num}')
-                client_ws.row_dimensions[row_num].height = 40
-            except:
-                pass
+        # Other columns with Polish notation
+        client_ws.cell(row=row_num, column=2, value=part['name'])
+        client_ws.cell(row=row_num, column=3, value=part['material'])
+        client_ws.cell(row=row_num, column=4, value=part['thickness'])
+        #client_ws.cell(row=row_num, column=5, value=format_excel_number(part.get('raw_weight', 0.0)))
+        cell = client_ws.cell(row=row, column=5, value=part.get('raw_weight', 0.0))
+        cell.number_format = '#,##0.00'
+        client_ws.cell(row=row_num, column=6, value=part['qty'])
+        #client_ws.cell(row=row_num, column=7, value=(unit_total))
+        cell = client_ws.cell(row=row, column=7, value=unit_total)
+        cell.number_format = '#,##0'
         
-        # Other columns
-        values = [
-            part['name'],
-            part['material'],
-            part['thickness'],
-            f"{part.get('raw_weight', 0.0):.3f}",
-            part['qty'],
-            f"{unit_total:.2f}",
-            f"{total_part:.2f}"
-        ]
+        # Total cost formula
+        #client_ws.cell(row=row_num, column=8).value = f"=F{row_num}*G{row_num}"
+        cell = client_ws.cell(row=row, column=8, value=f"=F{row_num}*G{row_num}")
+        cell.number_format = '#,##0.00'
         
-        for col, value in enumerate(values, 3):
-            cell = client_ws.cell(row=row_num, column=col, value=value)
+        # Apply formatting
+        for col in range(2, 9):
+            cell = client_ws.cell(row=row_num, column=col)
             cell.fill = PatternFill(start_color=fill_color, end_color=fill_color, fill_type="solid")
-            if col in [5, 6, 8, 9]:  # Numeric columns
+            if col in [4, 5, 7, 8]:  # Numeric columns
                 cell.alignment = Alignment(horizontal="right")
             cell.border = Border(left=Side(style='thin'), right=Side(style='thin'))
     
-    # Total row
+    # Total row with formula
     total_row = data_start_row + len(all_parts)
-    client_ws.merge_cells(f'A{total_row}:F{total_row}')
-    cell = client_ws.cell(row=total_row, column=1, value="TOTAL")
+    client_ws.merge_cells(f'A{total_row}:E{total_row}')
+    cell = client_ws.cell(row=total_row, column=1, value="RAZEM")
     cell.font = Font(bold=True, size=12)
     cell.fill = PatternFill(start_color="D9D9D9", end_color="D9D9D9", fill_type="solid")
     cell.alignment = Alignment(horizontal="right")
+    cell.number_format = '#,##0.00'
     
-    for col in range(7, 9):
+    for col in range(6, 8):
         cell = client_ws.cell(row=total_row, column=col, value="")
         cell.fill = PatternFill(start_color="D9D9D9", end_color="D9D9D9", fill_type="solid")
     
-    cell = client_ws.cell(row=total_row, column=9, value=f"{client_total:.2f}")
-    cell.font = Font(bold=True, size=12)
-    cell.fill = PatternFill(start_color="D9D9D9", end_color="D9D9D9", fill_type="solid")
-    cell.alignment = Alignment(horizontal="right")
-    cell.border = Border(top=Side(style='double'), bottom=Side(style='double'))
+    # Total formula
+    client_ws.cell(row=total_row, column=8).value = f"=SUM(H{data_start_row}:H{total_row-1})"
+    client_ws.cell(row=total_row, column=8).font = Font(bold=True, size=12)
+    client_ws.cell(row=total_row, column=8).fill = PatternFill(start_color="D9D9D9", end_color="D9D9D9", fill_type="solid")
+    client_ws.cell(row=total_row, column=8).alignment = Alignment(horizontal="right")
+    client_ws.cell(row=total_row, column=8).border = Border(top=Side(style='double'), bottom=Side(style='double'))
     
     # Set column widths
     column_widths = {
         'A': 8,   # ID
-        'B': 12,  # Miniatura
-        'C': 35,  # Part name
-        'D': 15,  # Material
-        'E': 12,  # Thickness
-        'F': 18,  # Weight
-        'G': 10,  # Quantity
-        'H': 18,  # Unit cost
-        'I': 18   # Total cost
+        'B': 35,  # Part name
+        'C': 15,  # Material
+        'D': 12,  # Thickness
+        'E': 18,  # Weight
+        'F': 10,  # Quantity
+        'G': 18,  # Unit cost
+        'H': 18   # Total cost
     }
     
     for col, width in column_widths.items():
@@ -2222,13 +2406,14 @@ def generate_report():
     client_ws.page_setup.fitToHeight = 0
     
     # Save the client report
-    client_wb.save(os.path.join(raporty_path, "Client report with margins.xlsx"))
+    fname = f"Raport_klienta_{offer_number.replace('/', '-')}.xlsx"
+    client_wb.save(os.path.join(raporty_path, fname))
     
-    messagebox.showinfo("Success", f"Reports generated in the Raporty folder!\n\n"
-                                  f"Files created:\n"
+    messagebox.showinfo("Sukces", f"Raporty wygenerowane w folderze Raporty!\n\n"
+                                  f"Utworzone pliki:\n"
                                   f"• {fname}\n"
-                                  f"• Enhanced Cost Report with Margins.xlsx\n"
-                                  f"• Client report with margins.xlsx\n"
+                                  f"• Raport kosztów\n"
+                                  f"• Raport klienta\n"
                                   f"• cost_calculation_log.txt")
 
 # left buttons
