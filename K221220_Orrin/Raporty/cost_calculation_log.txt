@@ -1,0 +1,87 @@
+Enhanced Calculation Log with Dynamic Margins - 2025-09-04 15:55:58.862732
+================================================================================
+Folder: C:/Users/artur/source/repos/arturave/Wycena_Python_CypCloud/K221220_Orrin
+Client: Client
+Offer: Laser/0046/09/2025
+================================================================================
+
+MARGIN CALCULATION SUMMARY
+----------------------------------------
+Price sources: materials prices.xlsx, cutting prices.xlsx
+Average material margin calculated: 0.00%
+Average cutting margin calculated: 0.00%
+Applied material margin: 0.00%
+Applied cutting margin: 0.00%
+
+Margin Calculation Parameters:
+Material: 250% to 0% margin for areas 0.00 to 1.00 m²
+Cutting: 200% to 0% margin for lengths 0 to 5000 mm
+
+FILE-BY-FILE MARGIN ANALYSIS
+----------------------------------------
+
+File: K221220_Orrin-S235-6-Oxygen(3).xlsx
+  Material margin: 0.00%
+  Cutting margin: 0.00%
+  Total area: 21.0521 m²
+  Total cutting: 719800.0 mm
+  Rows processed: 4
+
+================================================================================
+DETAILED PART-BY-PART COST BREAKDOWN
+================================================================================
+
+Part ID: 1 - Pos.2_MIR_S 235_6mm_228pcs
+------------------------------------------------------------
+  File: K221220_Orrin-S235-6-Oxygen(3).xlsx
+  Material: S235 6.0 mm
+  Quantity: 228 pcs
+  Raw weight: 1.710 kg
+  Adjusted weight: 2.205 kg
+
+  Cost Components:
+    Material cost: 7.05 PLN
+      Weight: 2.205 kg
+      Price: 2.99 PLN/kg
+      With 7% margin: 7.05 PLN
+    Cutting cost: 3.02 PLN
+      Length: 1.01 m
+      Rate: 2.99 PLN/m
+    Contours: 0.50 PLN
+      Quantity: 5
+      Rate: 0.10 PLN/pc
+    Marking: 0.00 PLN
+    Defilm: 0.00 PLN
+    Operational overhead: 0.44 PLN
+    Technology overhead: 0.11 PLN
+
+  Final unit cost: 11.13 PLN
+  Total for 228 pcs: 2537.64 PLN
+
+Part ID: 2 - Pos.2_S 235_6mm_228pcs
+------------------------------------------------------------
+  File: K221220_Orrin-S235-6-Oxygen(3).xlsx
+  Material: S235 6.0 mm
+  Quantity: 228 pcs
+  Raw weight: 1.710 kg
+  Adjusted weight: 2.205 kg
+
+  Cost Components:
+    Material cost: 7.05 PLN
+      Weight: 2.205 kg
+      Price: 2.99 PLN/kg
+      With 7% margin: 7.05 PLN
+    Cutting cost: 3.02 PLN
+      Length: 1.01 m
+      Rate: 2.99 PLN/m
+    Contours: 0.50 PLN
+      Quantity: 5
+      Rate: 0.10 PLN/pc
+    Marking: 0.00 PLN
+    Defilm: 0.00 PLN
+    Operational overhead: 0.44 PLN
+    Technology overhead: 0.11 PLN
+
+  Final unit cost: 11.13 PLN
+  Total for 228 pcs: 2537.64 PLN
+

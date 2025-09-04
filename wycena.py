@@ -434,24 +434,53 @@ ttk.Label(subpanel2, text="Additional costs for the order:").grid(row=2, column=
 add_order_cost_entry = ttk.Entry(subpanel2)
 add_order_cost_entry.grid(row=2, column=1, padx=(0,20))
 add_order_cost_entry.insert(tk.INSERT, "0,00")
-
-# Right column - Cutting time calculation header
-ttk.Label(subpanel2, text="CUTTING TIME CALCULATION", font=("Arial", 10, "bold")).grid(row=0, column=2, columnspan=2, pady=(0, 5), padx=(20,5))
+# --- LEFT: Cutting time calculation (cols 2-3) ---
+ttk.Label(subpanel2, text="CUTTING TIME CALCULATION",
+          font=("Arial", 10, "bold")).grid(row=0, column=2, columnspan=2, pady=(0, 5), padx=(20, 5), sticky="w")
 
 ttk.Label(subpanel2, text="O₂ cutting rate [PLN/h]:").grid(row=1, column=2, sticky="w", padx=(20,10))
 oxygen_rate_entry = ttk.Entry(subpanel2)
-oxygen_rate_entry.grid(row=1, column=3, padx=(0,5))
+oxygen_rate_entry.grid(row=1, column=3, padx=(0,5), sticky="we")
 oxygen_rate_entry.insert(tk.INSERT, "350,00")
 
 ttk.Label(subpanel2, text="N₂ cutting rate [PLN/h]:").grid(row=2, column=2, sticky="w", padx=(20,10))
 nitrogen_rate_entry = ttk.Entry(subpanel2)
-nitrogen_rate_entry.grid(row=2, column=3, padx=(0,5))
+nitrogen_rate_entry.grid(row=2, column=3, padx=(0,5), sticky="we")
 nitrogen_rate_entry.insert(tk.INSERT, "550,00")
 
 ttk.Label(subpanel2, text="AL N₂ cutting rate [PLN/h]:").grid(row=3, column=2, sticky="w", padx=(20,10))
 al_nitrogen_rate_entry = ttk.Entry(subpanel2)
-al_nitrogen_rate_entry.grid(row=3, column=3, padx=(0,5))
+al_nitrogen_rate_entry.grid(row=3, column=3, padx=(0,5), sticky="we")
 al_nitrogen_rate_entry.insert(tk.INSERT, "650,00")
+
+
+# --- RIGHT: Real TKW (cols 4-5) ---
+ttk.Label(subpanel2, text="Real TKW",
+          font=("Arial", 10, "bold")).grid(row=0, column=4, columnspan=2, pady=(0, 5), padx=(20, 5), sticky="w")
+
+ttk.Label(subpanel2, text="O₂ cutting rate TKW [PLN/h]:").grid(row=1, column=4, sticky="w", padx=(20,10))
+oxygen_rate_entry_TKW = ttk.Entry(subpanel2)
+oxygen_rate_entry_TKW.grid(row=1, column=5, padx=(0,5), sticky="we")
+oxygen_rate_entry_TKW.insert(tk.INSERT, "262,50")
+
+ttk.Label(subpanel2, text="N₂ cutting rate TKW [PLN/h]:").grid(row=2, column=4, sticky="w", padx=(20,10))
+nitrogen_rate_entry_TKW = ttk.Entry(subpanel2)
+nitrogen_rate_entry_TKW.grid(row=2, column=5, padx=(0,5), sticky="we")
+nitrogen_rate_entry_TKW.insert(tk.INSERT, "412,50")
+
+ttk.Label(subpanel2, text="AL N₂ cutting rate TKW [PLN/h]:").grid(row=3, column=4, sticky="w", padx=(20,10))
+al_nitrogen_rate_entry_TKW = ttk.Entry(subpanel2)
+al_nitrogen_rate_entry_TKW.grid(row=3, column=5, padx=(0,5), sticky="we")
+al_nitrogen_rate_entry_TKW.insert(tk.INSERT, "487,50")
+
+ttk.Label(subpanel2, text="Bending percent TKW in cust.price [%]:").grid(row=4, column=4, sticky="w", padx=(20,10))
+bending_percent_entry_TKW = ttk.Entry(subpanel2)
+bending_percent_entry_TKW.grid(row=4, column=5, padx=(0,5), sticky="we")
+bending_percent_entry_TKW.insert(tk.INSERT, "75,00")
+
+# (opcjonalnie) dopasowanie szerokości kolumn dla lepszego layoutu
+subpanel2.grid_columnconfigure(3, weight=1)
+subpanel2.grid_columnconfigure(5, weight=1)
 
 # Separator
 ttk.Label(subpanel2, text="").grid(row=3, column=0, columnspan=4, pady=5)
@@ -1012,15 +1041,21 @@ def _interp(x, pts):
 def update_cost_calculations():
     """Update all cost calculation displays in Panel 2"""
     global oxygen_cutting_time, nitrogen_cutting_time, aluminum_nitrogen_cutting_time, total_material_cost
-    
+    global oxygen_rate_entry_tkw, nitrogen_rate_entry_tkw, al_nitrogen_rate_entry_tkw, bending_percent_entry_tkw
+
     # Get rates from entries
-    oxygen_rate = _parse_float(oxygen_rate_entry.get()) or 0.0
-    nitrogen_rate = _parse_float(nitrogen_rate_entry.get()) or 0.0
-    al_nitrogen_rate = _parse_float(al_nitrogen_rate_entry.get()) or 0.0
-    op_cost_per_sheet = _parse_float(op_cost_entry.get()) or 0.0
+    oxygen_rate = _parse_float(oxygen_rate_entry.get()) or 350.0
+    nitrogen_rate = _parse_float(nitrogen_rate_entry.get()) or 550.0
+    al_nitrogen_rate = _parse_float(al_nitrogen_rate_entry.get()) or 650.0
+    op_cost_per_sheet = _parse_float(op_cost_entry.get()) or 40.0
     tech_per_order = _parse_float(tech_order_entry.get()) or 0.0
     add_costs_order = _parse_float(add_order_cost_entry.get()) or 0.0
     
+    oxygen_rate_tkw = _parse_float(oxygen_rate_entry_TKW.get()) or 262.50
+    nitrogen_rate_tkw = _parse_float(nitrogen_rate_entry_TKW.get()) or 412.50
+    al_nitrogen_rate_tkw = _parse_float(al_nitrogen_rate_entry_TKW.get()) or 487.50
+    bending_percent_entry_tkw = _parse_float(bending_percent_entry_TKW.get()) or 75.0
+
     # Calculate cutting costs
     oxygen_cost = oxygen_cutting_time * oxygen_rate
     nitrogen_cost = nitrogen_cutting_time * nitrogen_rate + aluminum_nitrogen_cutting_time * al_nitrogen_rate

@@ -1,6 +1,959 @@
-Log obliczeń - 2025-08-27 14:54:57.483784
+Enhanced Calculation Log with Dynamic Margins - 2025-09-04 15:57:08.138707
+================================================================================
 Folder: C:/Users/artur/source/repos/arturave/Wycena_Python_CypCloud/Wycena
-Klient: Klient
-Źródła cen: materials prices.xlsx, cutting prices.xlsx
+Client: Client
+Offer: Laser/0049/09/2025
+================================================================================
 
-Szczegóły obliczeń:
+MARGIN CALCULATION SUMMARY
+----------------------------------------
+Price sources: materials prices.xlsx, cutting prices.xlsx
+Average material margin calculated: 1.09%
+Average cutting margin calculated: 0.00%
+Applied material margin: 1.09%
+Applied cutting margin: 0.00%
+
+Margin Calculation Parameters:
+Material: 250% to 0% margin for areas 0.00 to 1.00 m²
+Cutting: 200% to 0% margin for lengths 0 to 5000 mm
+
+FILE-BY-FILE MARGIN ANALYSIS
+----------------------------------------
+
+File: 2025.08.04 FW WYCENA 1035SUR082025-S235-1,5-Nitrogen(6).xlsx
+  Material margin: 0.00%
+  Cutting margin: 0.00%
+  Total area: 69.2522 m²
+  Total cutting: 453250.0 mm
+  Rows processed: 7
+
+File: 2025.08.04 FW WYCENA 1035SUR082025-S235-1-Nitrogen(3).xlsx
+  Material margin: 0.00%
+  Cutting margin: 0.00%
+  Total area: 24.9520 m²
+  Total cutting: 347390.0 mm
+  Rows processed: 4
+
+File: 2025.08.04 FW WYCENA 1035SUR082025-S235-10-Oxygen(5).xlsx
+  Material margin: 13.37%
+  Cutting margin: 0.00%
+  Total area: 15.3680 m²
+  Total cutting: 820740.0 mm
+  Rows processed: 6
+
+File: 2025.08.04 FW WYCENA 1035SUR082025-S235-3-Oxygen(6).xlsx
+  Material margin: 0.00%
+  Cutting margin: 0.00%
+  Total area: 110.4880 m²
+  Total cutting: 1335060.0 mm
+  Rows processed: 7
+
+File: 2025.08.04 FW WYCENA 1035SUR082025-S235-5-Oxygen(6).xlsx
+  Material margin: 2.41%
+  Cutting margin: 0.00%
+  Total area: 56.6465 m²
+  Total cutting: 1424000.0 mm
+  Rows processed: 7
+
+File: 2025.08.04 FW WYCENA 1035SUR082025-S235-8-Nitrogen(8).xlsx
+  Material margin: 0.00%
+  Cutting margin: 0.00%
+  Total area: 38.3345 m²
+  Total cutting: 782670.0 mm
+  Rows processed: 9
+
+================================================================================
+DETAILED PART-BY-PART COST BREAKDOWN
+================================================================================
+
+Part ID: 1 - Rew001_SO-B32-001_SRODEK_I_2500
+------------------------------------------------------------
+  File: 2025.08.04 FW WYCENA 1035SUR082025-S235-1,5-Nitrogen(6).xlsx
+  Material: S235 1.5 mm
+  Quantity: 48 pcs
+  Raw weight: 5.680 kg
+  Adjusted weight: 7.897 kg
+
+  Cost Components:
+    Material cost: 32.87 PLN
+      Weight: 7.897 kg
+      Price: 3.89 PLN/kg
+      With 7% margin: 32.87 PLN
+    Cutting cost: 3.77 PLN
+      Length: 3.39 m
+      Rate: 1.11 PLN/m
+    Contours: 0.10 PLN
+      Quantity: 1
+      Rate: 0.10 PLN/pc
+    Marking: 0.08 PLN
+    Defilm: 0.00 PLN
+    Operational overhead: 2.50 PLN
+    Technology overhead: 0.04 PLN
+
+  Final unit cost: 39.35 PLN
+  Total for 48 pcs: 1888.80 PLN
+
+Part ID: 2 - Rew001_SO-036-002_KANAL_SCIANA_OKNO_ZASLEPKA
+------------------------------------------------------------
+  File: 2025.08.04 FW WYCENA 1035SUR082025-S235-1,5-Nitrogen(6).xlsx
+  Material: S235 1.5 mm
+  Quantity: 48 pcs
+  Raw weight: 0.480 kg
+  Adjusted weight: 0.667 kg
+
+  Cost Components:
+    Material cost: 2.78 PLN
+      Weight: 0.667 kg
+      Price: 3.89 PLN/kg
+      With 7% margin: 2.78 PLN
+    Cutting cost: 1.16 PLN
+      Length: 1.04 m
+      Rate: 1.11 PLN/m
+    Contours: 0.40 PLN
+      Quantity: 4
+      Rate: 0.10 PLN/pc
+    Marking: 0.07 PLN
+    Defilm: 0.00 PLN
+    Operational overhead: 2.50 PLN
+    Technology overhead: 0.04 PLN
+
+  Final unit cost: 6.95 PLN
+  Total for 48 pcs: 333.60 PLN
+
+Part ID: 3 - Rew001_SO-G68-001_FIBER_DNO_2520
+------------------------------------------------------------
+  File: 2025.08.04 FW WYCENA 1035SUR082025-S235-1,5-Nitrogen(6).xlsx
+  Material: S235 1.5 mm
+  Quantity: 12 pcs
+  Raw weight: 25.790 kg
+  Adjusted weight: 35.854 kg
+
+  Cost Components:
+    Material cost: 149.24 PLN
+      Weight: 35.854 kg
+      Price: 3.89 PLN/kg
+      With 7% margin: 149.24 PLN
+    Cutting cost: 9.76 PLN
+      Length: 8.78 m
+      Rate: 1.11 PLN/m
+    Contours: 4.80 PLN
+      Quantity: 48
+      Rate: 0.10 PLN/pc
+    Marking: 0.08 PLN
+    Defilm: 0.00 PLN
+    Operational overhead: 2.50 PLN
+    Technology overhead: 0.04 PLN
+
+  Final unit cost: 166.41 PLN
+  Total for 12 pcs: 1996.92 PLN
+
+Part ID: 1 - Rew001_SO-H16-001_FIBER_BOK_Z_OKNAMI_2000_PALETA
+------------------------------------------------------------
+  File: 2025.08.04 FW WYCENA 1035SUR082025-S235-1-Nitrogen(3).xlsx
+  Material: S235 1.0 mm
+  Quantity: 12 pcs
+  Raw weight: 4.830 kg
+  Adjusted weight: 7.951 kg
+
+  Cost Components:
+    Material cost: 33.09 PLN
+      Weight: 7.951 kg
+      Price: 3.89 PLN/kg
+      With 7% margin: 33.09 PLN
+    Cutting cost: 14.22 PLN
+      Length: 12.80 m
+      Rate: 1.11 PLN/m
+    Contours: 6.00 PLN
+      Quantity: 60
+      Rate: 0.10 PLN/pc
+    Marking: 0.08 PLN
+    Defilm: 0.00 PLN
+    Operational overhead: 2.50 PLN
+    Technology overhead: 0.04 PLN
+
+  Final unit cost: 55.93 PLN
+  Total for 12 pcs: 671.16 PLN
+
+Part ID: 2 - Rew003_SO-031-001_BOK_OKNO_ZASLEPKA
+------------------------------------------------------------
+  File: 2025.08.04 FW WYCENA 1035SUR082025-S235-1-Nitrogen(3).xlsx
+  Material: S235 1.0 mm
+  Quantity: 48 pcs
+  Raw weight: 1.280 kg
+  Adjusted weight: 2.107 kg
+
+  Cost Components:
+    Material cost: 8.77 PLN
+      Weight: 2.107 kg
+      Price: 3.89 PLN/kg
+      With 7% margin: 8.77 PLN
+    Cutting cost: 1.99 PLN
+      Length: 1.79 m
+      Rate: 1.11 PLN/m
+    Contours: 0.50 PLN
+      Quantity: 5
+      Rate: 0.10 PLN/pc
+    Marking: 0.00 PLN
+    Defilm: 0.00 PLN
+    Operational overhead: 2.50 PLN
+    Technology overhead: 0.04 PLN
+
+  Final unit cost: 13.80 PLN
+  Total for 48 pcs: 662.40 PLN
+
+Part ID: 1 - Rew001_SO-G95-001_FIBER_GRZEBIEN_PAL_2520
+------------------------------------------------------------
+  File: 2025.08.04 FW WYCENA 1035SUR082025-S235-10-Oxygen(5).xlsx
+  Material: S235 10.0 mm
+  Quantity: 36 pcs
+  Raw weight: 12.220 kg
+  Adjusted weight: 15.563 kg
+
+  Cost Components:
+    Material cost: 49.79 PLN
+      Weight: 15.563 kg
+      Price: 2.99 PLN/kg
+      With 7% margin: 49.79 PLN
+    Cutting cost: 23.65 PLN
+      Length: 5.96 m
+      Rate: 3.97 PLN/m
+    Contours: 0.70 PLN
+      Quantity: 7
+      Rate: 0.10 PLN/pc
+    Marking: 0.08 PLN
+    Defilm: 0.00 PLN
+    Operational overhead: 2.50 PLN
+    Technology overhead: 0.04 PLN
+
+  Final unit cost: 76.76 PLN
+  Total for 36 pcs: 2763.36 PLN
+
+Part ID: 2 - Rew001_SO-G81-001_FIBER_PAL_RAMA_POZYCJONER_Y_II
+------------------------------------------------------------
+  File: 2025.08.04 FW WYCENA 1035SUR082025-S235-10-Oxygen(5).xlsx
+  Material: S235 10.0 mm
+  Quantity: 24 pcs
+  Raw weight: 0.370 kg
+  Adjusted weight: 0.471 kg
+
+  Cost Components:
+    Material cost: 1.51 PLN
+      Weight: 0.471 kg
+      Price: 2.99 PLN/kg
+      With 7% margin: 1.51 PLN
+    Cutting cost: 1.31 PLN
+      Length: 0.33 m
+      Rate: 3.97 PLN/m
+    Contours: 0.10 PLN
+      Quantity: 1
+      Rate: 0.10 PLN/pc
+    Marking: 0.08 PLN
+    Defilm: 0.00 PLN
+    Operational overhead: 2.50 PLN
+    Technology overhead: 0.04 PLN
+
+  Final unit cost: 5.54 PLN
+  Total for 24 pcs: 132.96 PLN
+
+Part ID: 3 - Rew001_SO-G72-001_FIBER_PAL_RAMA_GRZEB_BOK
+------------------------------------------------------------
+  File: 2025.08.04 FW WYCENA 1035SUR082025-S235-10-Oxygen(5).xlsx
+  Material: S235 10.0 mm
+  Quantity: 12 pcs
+  Raw weight: 40.730 kg
+  Adjusted weight: 51.872 kg
+
+  Cost Components:
+    Material cost: 165.95 PLN
+      Weight: 51.872 kg
+      Price: 2.99 PLN/kg
+      With 7% margin: 165.95 PLN
+    Cutting cost: 53.17 PLN
+      Length: 13.40 m
+      Rate: 3.97 PLN/m
+    Contours: 5.10 PLN
+      Quantity: 51
+      Rate: 0.10 PLN/pc
+    Marking: 0.08 PLN
+    Defilm: 0.00 PLN
+    Operational overhead: 2.50 PLN
+    Technology overhead: 0.04 PLN
+
+  Final unit cost: 226.85 PLN
+  Total for 12 pcs: 2722.20 PLN
+
+Part ID: 4 - Rew001_SO-G77-001_FIBER_PAL_NOGA_SRODKOWA
+------------------------------------------------------------
+  File: 2025.08.04 FW WYCENA 1035SUR082025-S235-10-Oxygen(5).xlsx
+  Material: S235 10.0 mm
+  Quantity: 12 pcs
+  Raw weight: 0.770 kg
+  Adjusted weight: 0.981 kg
+
+  Cost Components:
+    Material cost: 3.14 PLN
+      Weight: 0.981 kg
+      Price: 2.99 PLN/kg
+      With 7% margin: 3.14 PLN
+    Cutting cost: 2.62 PLN
+      Length: 0.66 m
+      Rate: 3.97 PLN/m
+    Contours: 0.10 PLN
+      Quantity: 1
+      Rate: 0.10 PLN/pc
+    Marking: 0.07 PLN
+    Defilm: 0.00 PLN
+    Operational overhead: 2.50 PLN
+    Technology overhead: 0.04 PLN
+
+  Final unit cost: 8.47 PLN
+  Total for 12 pcs: 101.64 PLN
+
+Part ID: 5 - Rew001_SO-G75-002_FIBER_PAL_RAMA_POZ_Y_HAK
+------------------------------------------------------------
+  File: 2025.08.04 FW WYCENA 1035SUR082025-S235-10-Oxygen(5).xlsx
+  Material: S235 10.0 mm
+  Quantity: 24 pcs
+  Raw weight: 1.200 kg
+  Adjusted weight: 1.528 kg
+
+  Cost Components:
+    Material cost: 4.89 PLN
+      Weight: 1.528 kg
+      Price: 2.99 PLN/kg
+      With 7% margin: 4.89 PLN
+    Cutting cost: 3.57 PLN
+      Length: 0.90 m
+      Rate: 3.97 PLN/m
+    Contours: 0.20 PLN
+      Quantity: 2
+      Rate: 0.10 PLN/pc
+    Marking: 0.08 PLN
+    Defilm: 0.00 PLN
+    Operational overhead: 2.50 PLN
+    Technology overhead: 0.04 PLN
+
+  Final unit cost: 11.28 PLN
+  Total for 24 pcs: 270.72 PLN
+
+Part ID: 1 - Rew004_SO-539-002_KANAL_PALETA
+------------------------------------------------------------
+  File: 2025.08.04 FW WYCENA 1035SUR082025-S235-3-Oxygen(6).xlsx
+  Material: S235 3.0 mm
+  Quantity: 24 pcs
+  Raw weight: 26.220 kg
+  Adjusted weight: 34.360 kg
+
+  Cost Components:
+    Material cost: 108.82 PLN
+      Weight: 34.360 kg
+      Price: 2.96 PLN/kg
+      With 7% margin: 108.82 PLN
+    Cutting cost: 43.28 PLN
+      Length: 19.29 m
+      Rate: 2.24 PLN/m
+    Contours: 6.50 PLN
+      Quantity: 65
+      Rate: 0.10 PLN/pc
+    Marking: 0.00 PLN
+    Defilm: 0.00 PLN
+    Operational overhead: 2.50 PLN
+    Technology overhead: 0.04 PLN
+
+  Final unit cost: 161.14 PLN
+  Total for 24 pcs: 3867.36 PLN
+
+Part ID: 2 - Rew001_SO-G69-001_FIBER_WANNA_2520
+------------------------------------------------------------
+  File: 2025.08.04 FW WYCENA 1035SUR082025-S235-3-Oxygen(6).xlsx
+  Material: S235 3.0 mm
+  Quantity: 24 pcs
+  Raw weight: 51.500 kg
+  Adjusted weight: 67.488 kg
+
+  Cost Components:
+    Material cost: 213.75 PLN
+      Weight: 67.488 kg
+      Price: 2.96 PLN/kg
+      With 7% margin: 213.75 PLN
+    Cutting cost: 41.10 PLN
+      Length: 18.32 m
+      Rate: 2.24 PLN/m
+    Contours: 4.50 PLN
+      Quantity: 45
+      Rate: 0.10 PLN/pc
+    Marking: 0.00 PLN
+    Defilm: 0.00 PLN
+    Operational overhead: 2.50 PLN
+    Technology overhead: 0.04 PLN
+
+  Final unit cost: 261.89 PLN
+  Total for 24 pcs: 6285.36 PLN
+
+Part ID: 3 - Rew001_SO-G76-001_FIBER_PAL_2520_ZAMK_CZOL
+------------------------------------------------------------
+  File: 2025.08.04 FW WYCENA 1035SUR082025-S235-3-Oxygen(6).xlsx
+  Material: S235 3.0 mm
+  Quantity: 2 pcs
+  Raw weight: 9.500 kg
+  Adjusted weight: 12.449 kg
+
+  Cost Components:
+    Material cost: 39.43 PLN
+      Weight: 12.449 kg
+      Price: 2.96 PLN/kg
+      With 7% margin: 39.43 PLN
+    Cutting cost: 13.10 PLN
+      Length: 5.84 m
+      Rate: 2.24 PLN/m
+    Contours: 0.10 PLN
+      Quantity: 1
+      Rate: 0.10 PLN/pc
+    Marking: 0.00 PLN
+    Defilm: 0.00 PLN
+    Operational overhead: 2.50 PLN
+    Technology overhead: 0.04 PLN
+
+  Final unit cost: 55.17 PLN
+  Total for 2 pcs: 110.34 PLN
+
+Part ID: 4 - Rew002_SO-413-001_MOCOWANIE_SILOWNIKA
+------------------------------------------------------------
+  File: 2025.08.04 FW WYCENA 1035SUR082025-S235-3-Oxygen(6).xlsx
+  Material: S235 3.0 mm
+  Quantity: 48 pcs
+  Raw weight: 0.080 kg
+  Adjusted weight: 0.105 kg
+
+  Cost Components:
+    Material cost: 0.33 PLN
+      Weight: 0.105 kg
+      Price: 2.96 PLN/kg
+      With 7% margin: 0.33 PLN
+    Cutting cost: 1.44 PLN
+      Length: 0.64 m
+      Rate: 2.24 PLN/m
+    Contours: 0.80 PLN
+      Quantity: 8
+      Rate: 0.10 PLN/pc
+    Marking: 0.06 PLN
+    Defilm: 0.00 PLN
+    Operational overhead: 2.50 PLN
+    Technology overhead: 0.04 PLN
+
+  Final unit cost: 5.17 PLN
+  Total for 48 pcs: 248.16 PLN
+
+Part ID: 5 - Rew001_SO-H09-001_FIBER_PAL_OSL_GRZEB_BOK
+------------------------------------------------------------
+  File: 2025.08.04 FW WYCENA 1035SUR082025-S235-3-Oxygen(6).xlsx
+  Material: S235 3.0 mm
+  Quantity: 12 pcs
+  Raw weight: 7.970 kg
+  Adjusted weight: 10.444 kg
+
+  Cost Components:
+    Material cost: 33.08 PLN
+      Weight: 10.444 kg
+      Price: 2.96 PLN/kg
+      With 7% margin: 33.08 PLN
+    Cutting cost: 11.67 PLN
+      Length: 5.20 m
+      Rate: 2.24 PLN/m
+    Contours: 0.10 PLN
+      Quantity: 1
+      Rate: 0.10 PLN/pc
+    Marking: 0.00 PLN
+    Defilm: 0.00 PLN
+    Operational overhead: 2.50 PLN
+    Technology overhead: 0.04 PLN
+
+  Final unit cost: 47.39 PLN
+  Total for 12 pcs: 568.68 PLN
+
+Part ID: 6 - Rew001_SO-H07-001_FIBER_PAL_DOSZCZ_GORNE
+------------------------------------------------------------
+  File: 2025.08.04 FW WYCENA 1035SUR082025-S235-3-Oxygen(6).xlsx
+  Material: S235 3.0 mm
+  Quantity: 24 pcs
+  Raw weight: 1.860 kg
+  Adjusted weight: 2.437 kg
+
+  Cost Components:
+    Material cost: 7.72 PLN
+      Weight: 2.437 kg
+      Price: 2.96 PLN/kg
+      With 7% margin: 7.72 PLN
+    Cutting cost: 5.79 PLN
+      Length: 2.58 m
+      Rate: 2.24 PLN/m
+    Contours: 0.60 PLN
+      Quantity: 6
+      Rate: 0.10 PLN/pc
+    Marking: 0.08 PLN
+    Defilm: 0.00 PLN
+    Operational overhead: 2.50 PLN
+    Technology overhead: 0.04 PLN
+
+  Final unit cost: 16.73 PLN
+  Total for 24 pcs: 401.52 PLN
+
+Part ID: 1 - Rew001_SO-G93-001_FIBER_MOC_DASZKA_SRODEK_PAL
+------------------------------------------------------------
+  File: 2025.08.04 FW WYCENA 1035SUR082025-S235-5-Oxygen(6).xlsx
+  Material: S235 5.0 mm
+  Quantity: 144 pcs
+  Raw weight: 0.240 kg
+  Adjusted weight: 0.285 kg
+
+  Cost Components:
+    Material cost: 0.89 PLN
+      Weight: 0.285 kg
+      Price: 2.91 PLN/kg
+      With 7% margin: 0.89 PLN
+    Cutting cost: 1.36 PLN
+      Length: 0.53 m
+      Rate: 2.56 PLN/m
+    Contours: 0.10 PLN
+      Quantity: 1
+      Rate: 0.10 PLN/pc
+    Marking: 0.08 PLN
+    Defilm: 0.00 PLN
+    Operational overhead: 2.50 PLN
+    Technology overhead: 0.04 PLN
+
+  Final unit cost: 4.97 PLN
+  Total for 144 pcs: 715.68 PLN
+
+Part ID: 2 - Rew001_SO-H15-001_FIBER_PAL_2520_DNO_WANNY_5
+------------------------------------------------------------
+  File: 2025.08.04 FW WYCENA 1035SUR082025-S235-5-Oxygen(6).xlsx
+  Material: S235 5.0 mm
+  Quantity: 48 pcs
+  Raw weight: 8.490 kg
+  Adjusted weight: 10.087 kg
+
+  Cost Components:
+    Material cost: 31.41 PLN
+      Weight: 10.087 kg
+      Price: 2.91 PLN/kg
+      With 7% margin: 31.41 PLN
+    Cutting cost: 5.87 PLN
+      Length: 2.29 m
+      Rate: 2.56 PLN/m
+    Contours: 0.10 PLN
+      Quantity: 1
+      Rate: 0.10 PLN/pc
+    Marking: 0.08 PLN
+    Defilm: 0.00 PLN
+    Operational overhead: 2.50 PLN
+    Technology overhead: 0.04 PLN
+
+  Final unit cost: 40.00 PLN
+  Total for 48 pcs: 1920.00 PLN
+
+Part ID: 3 - Rew001_SO-H04-001_FIBER_PAL_MOC_DASZKA_BOK_GNIAZDO
+------------------------------------------------------------
+  File: 2025.08.04 FW WYCENA 1035SUR082025-S235-5-Oxygen(6).xlsx
+  Material: S235 5.0 mm
+  Quantity: 96 pcs
+  Raw weight: 0.030 kg
+  Adjusted weight: 0.036 kg
+
+  Cost Components:
+    Material cost: 0.11 PLN
+      Weight: 0.036 kg
+      Price: 2.91 PLN/kg
+      With 7% margin: 0.11 PLN
+    Cutting cost: 0.44 PLN
+      Length: 0.17 m
+      Rate: 2.56 PLN/m
+    Contours: 0.20 PLN
+      Quantity: 2
+      Rate: 0.10 PLN/pc
+    Marking: 0.06 PLN
+    Defilm: 0.00 PLN
+    Operational overhead: 2.50 PLN
+    Technology overhead: 0.04 PLN
+
+  Final unit cost: 3.35 PLN
+  Total for 96 pcs: 321.60 PLN
+
+Part ID: 4 - Rew001_SO-G88-001_FIBER_RUSZT_PAL_2520_ZAMAWIAC_POLOWE
+------------------------------------------------------------
+  File: 2025.08.04 FW WYCENA 1035SUR082025-S235-5-Oxygen(6).xlsx
+  Material: S235 5.0 mm
+  Quantity: 168 pcs
+  Raw weight: 7.420 kg
+  Adjusted weight: 8.815 kg
+
+  Cost Components:
+    Material cost: 27.45 PLN
+      Weight: 8.815 kg
+      Price: 2.91 PLN/kg
+      With 7% margin: 27.45 PLN
+    Cutting cost: 12.82 PLN
+      Length: 5.00 m
+      Rate: 2.56 PLN/m
+    Contours: 0.10 PLN
+      Quantity: 1
+      Rate: 0.10 PLN/pc
+    Marking: 0.08 PLN
+    Defilm: 0.00 PLN
+    Operational overhead: 2.50 PLN
+    Technology overhead: 0.04 PLN
+
+  Final unit cost: 42.99 PLN
+  Total for 168 pcs: 7222.32 PLN
+
+Part ID: 5 - Rew001_SO-274-002_PROWADNICA_WIDEL_DLUGA
+------------------------------------------------------------
+  File: 2025.08.04 FW WYCENA 1035SUR082025-S235-5-Oxygen(6).xlsx
+  Material: S235 5.0 mm
+  Quantity: 24 pcs
+  Raw weight: 7.710 kg
+  Adjusted weight: 9.160 kg
+
+  Cost Components:
+    Material cost: 28.52 PLN
+      Weight: 9.160 kg
+      Price: 2.91 PLN/kg
+      With 7% margin: 28.52 PLN
+    Cutting cost: 11.95 PLN
+      Length: 4.66 m
+      Rate: 2.56 PLN/m
+    Contours: 0.10 PLN
+      Quantity: 1
+      Rate: 0.10 PLN/pc
+    Marking: 0.07 PLN
+    Defilm: 0.00 PLN
+    Operational overhead: 2.50 PLN
+    Technology overhead: 0.04 PLN
+
+  Final unit cost: 43.18 PLN
+  Total for 24 pcs: 1036.32 PLN
+
+Part ID: 6 - Rew001_SO-H02-001_FIBER_PAL_MOC_DASZKA_BOK_HAK
+------------------------------------------------------------
+  File: 2025.08.04 FW WYCENA 1035SUR082025-S235-5-Oxygen(6).xlsx
+  Material: S235 5.0 mm
+  Quantity: 96 pcs
+  Raw weight: 0.130 kg
+  Adjusted weight: 0.154 kg
+
+  Cost Components:
+    Material cost: 0.48 PLN
+      Weight: 0.154 kg
+      Price: 2.91 PLN/kg
+      With 7% margin: 0.48 PLN
+    Cutting cost: 1.03 PLN
+      Length: 0.40 m
+      Rate: 2.56 PLN/m
+    Contours: 0.10 PLN
+      Quantity: 1
+      Rate: 0.10 PLN/pc
+    Marking: 0.08 PLN
+    Defilm: 0.00 PLN
+    Operational overhead: 2.50 PLN
+    Technology overhead: 0.04 PLN
+
+  Final unit cost: 4.23 PLN
+  Total for 96 pcs: 406.08 PLN
+
+Part ID: 7 - Rew001_SO-F18-001_WZM_NOGI
+------------------------------------------------------------
+  File: 2025.08.04 FW WYCENA 1035SUR082025-S235-5-Oxygen(6).xlsx
+  Material: S235 5.0 mm
+  Quantity: 24 pcs
+  Raw weight: 0.230 kg
+  Adjusted weight: 0.273 kg
+
+  Cost Components:
+    Material cost: 0.85 PLN
+      Weight: 0.273 kg
+      Price: 2.91 PLN/kg
+      With 7% margin: 0.85 PLN
+    Cutting cost: 1.13 PLN
+      Length: 0.44 m
+      Rate: 2.56 PLN/m
+    Contours: 0.20 PLN
+      Quantity: 2
+      Rate: 0.10 PLN/pc
+    Marking: 0.08 PLN
+    Defilm: 0.00 PLN
+    Operational overhead: 2.50 PLN
+    Technology overhead: 0.04 PLN
+
+  Final unit cost: 4.80 PLN
+  Total for 24 pcs: 115.20 PLN
+
+Part ID: 8 - Rew001_SO-G82-001_FIBER_PAL_ZASLEPKA_WZM_BOKU
+------------------------------------------------------------
+  File: 2025.08.04 FW WYCENA 1035SUR082025-S235-5-Oxygen(6).xlsx
+  Material: S235 5.0 mm
+  Quantity: 24 pcs
+  Raw weight: 0.400 kg
+  Adjusted weight: 0.475 kg
+
+  Cost Components:
+    Material cost: 1.48 PLN
+      Weight: 0.475 kg
+      Price: 2.91 PLN/kg
+      With 7% margin: 1.48 PLN
+    Cutting cost: 1.62 PLN
+      Length: 0.63 m
+      Rate: 2.56 PLN/m
+    Contours: 0.20 PLN
+      Quantity: 2
+      Rate: 0.10 PLN/pc
+    Marking: 0.08 PLN
+    Defilm: 0.00 PLN
+    Operational overhead: 2.50 PLN
+    Technology overhead: 0.04 PLN
+
+  Final unit cost: 5.91 PLN
+  Total for 24 pcs: 141.84 PLN
+
+Part ID: 1 - Rew001_SO-G97-001_FIBER_PAL_BAZA_MOC_GRZEB_BOK
+------------------------------------------------------------
+  File: 2025.08.04 FW WYCENA 1035SUR082025-S235-8-Nitrogen(8).xlsx
+  Material: S235 8.0 mm
+  Quantity: 36 pcs
+  Raw weight: 0.180 kg
+  Adjusted weight: 0.201 kg
+
+  Cost Components:
+    Material cost: 0.63 PLN
+      Weight: 0.201 kg
+      Price: 2.93 PLN/kg
+      With 7% margin: 0.63 PLN
+    Cutting cost: 0.00 PLN
+      Length: 0.40 m
+      Rate: 0.00 PLN/m
+    Contours: 0.30 PLN
+      Quantity: 3
+      Rate: 0.10 PLN/pc
+    Marking: 0.07 PLN
+    Defilm: 0.00 PLN
+    Operational overhead: 2.50 PLN
+    Technology overhead: 0.04 PLN
+
+  Final unit cost: 3.54 PLN
+  Total for 36 pcs: 127.44 PLN
+
+Part ID: 2 - Rew001_SO-H04-001_FIBER_PAL_2520_DASZEK_BOK_619
+------------------------------------------------------------
+  File: 2025.08.04 FW WYCENA 1035SUR082025-S235-8-Nitrogen(8).xlsx
+  Material: S235 8.0 mm
+  Quantity: 24 pcs
+  Raw weight: 9.120 kg
+  Adjusted weight: 10.188 kg
+
+  Cost Components:
+    Material cost: 31.94 PLN
+      Weight: 10.188 kg
+      Price: 2.93 PLN/kg
+      With 7% margin: 31.94 PLN
+    Cutting cost: 0.00 PLN
+      Length: 1.98 m
+      Rate: 0.00 PLN/m
+    Contours: 0.50 PLN
+      Quantity: 5
+      Rate: 0.10 PLN/pc
+    Marking: 0.08 PLN
+    Defilm: 0.00 PLN
+    Operational overhead: 2.50 PLN
+    Technology overhead: 0.04 PLN
+
+  Final unit cost: 35.06 PLN
+  Total for 24 pcs: 841.44 PLN
+
+Part ID: 3 - Rew001_SO-H14-001_FIBER_DASZEK_TRAPEZ_PAL
+------------------------------------------------------------
+  File: 2025.08.04 FW WYCENA 1035SUR082025-S235-8-Nitrogen(8).xlsx
+  Material: S235 8.0 mm
+  Quantity: 48 pcs
+  Raw weight: 9.570 kg
+  Adjusted weight: 10.690 kg
+
+  Cost Components:
+    Material cost: 33.52 PLN
+      Weight: 10.690 kg
+      Price: 2.93 PLN/kg
+      With 7% margin: 33.52 PLN
+    Cutting cost: 0.00 PLN
+      Length: 1.63 m
+      Rate: 0.00 PLN/m
+    Contours: 0.10 PLN
+      Quantity: 1
+      Rate: 0.10 PLN/pc
+    Marking: 0.08 PLN
+    Defilm: 0.00 PLN
+    Operational overhead: 2.50 PLN
+    Technology overhead: 0.04 PLN
+
+  Final unit cost: 36.23 PLN
+  Total for 48 pcs: 1739.04 PLN
+
+Part ID: 4 - Rew001_SO-H08-001_FIBER_PAL_WANNA_WZMOC
+------------------------------------------------------------
+  File: 2025.08.04 FW WYCENA 1035SUR082025-S235-8-Nitrogen(8).xlsx
+  Material: S235 8.0 mm
+  Quantity: 72 pcs
+  Raw weight: 1.700 kg
+  Adjusted weight: 1.899 kg
+
+  Cost Components:
+    Material cost: 5.95 PLN
+      Weight: 1.899 kg
+      Price: 2.93 PLN/kg
+      With 7% margin: 5.95 PLN
+    Cutting cost: 0.00 PLN
+      Length: 1.24 m
+      Rate: 0.00 PLN/m
+    Contours: 0.30 PLN
+      Quantity: 3
+      Rate: 0.10 PLN/pc
+    Marking: 0.08 PLN
+    Defilm: 0.00 PLN
+    Operational overhead: 2.50 PLN
+    Technology overhead: 0.04 PLN
+
+  Final unit cost: 8.87 PLN
+  Total for 72 pcs: 638.64 PLN
+
+Part ID: 5 - Rew001_SO-G98-001_FIBER_PAL_BAZA_POZ_Y
+------------------------------------------------------------
+  File: 2025.08.04 FW WYCENA 1035SUR082025-S235-8-Nitrogen(8).xlsx
+  Material: S235 8.0 mm
+  Quantity: 12 pcs
+  Raw weight: 0.150 kg
+  Adjusted weight: 0.168 kg
+
+  Cost Components:
+    Material cost: 0.53 PLN
+      Weight: 0.168 kg
+      Price: 2.93 PLN/kg
+      With 7% margin: 0.53 PLN
+    Cutting cost: 0.00 PLN
+      Length: 0.30 m
+      Rate: 0.00 PLN/m
+    Contours: 0.20 PLN
+      Quantity: 2
+      Rate: 0.10 PLN/pc
+    Marking: 0.08 PLN
+    Defilm: 0.00 PLN
+    Operational overhead: 2.50 PLN
+    Technology overhead: 0.04 PLN
+
+  Final unit cost: 3.34 PLN
+  Total for 12 pcs: 40.08 PLN
+
+Part ID: 6 - Rew001_SO-G99-001_FIBER_PAL_2520_DASZEK_619
+------------------------------------------------------------
+  File: 2025.08.04 FW WYCENA 1035SUR082025-S235-8-Nitrogen(8).xlsx
+  Material: S235 8.0 mm
+  Quantity: 36 pcs
+  Raw weight: 15.680 kg
+  Adjusted weight: 17.516 kg
+
+  Cost Components:
+    Material cost: 54.91 PLN
+      Weight: 17.516 kg
+      Price: 2.93 PLN/kg
+      With 7% margin: 54.91 PLN
+    Cutting cost: 0.00 PLN
+      Length: 2.34 m
+      Rate: 0.00 PLN/m
+    Contours: 0.50 PLN
+      Quantity: 5
+      Rate: 0.10 PLN/pc
+    Marking: 0.08 PLN
+    Defilm: 0.00 PLN
+    Operational overhead: 2.50 PLN
+    Technology overhead: 0.04 PLN
+
+  Final unit cost: 58.03 PLN
+  Total for 36 pcs: 2089.08 PLN
+
+Part ID: 7 - Rew001_SO-H03-001_FIBER_PAL_2520_DASZEK_BOK_L_P
+------------------------------------------------------------
+  File: 2025.08.04 FW WYCENA 1035SUR082025-S235-8-Nitrogen(8).xlsx
+  Material: S235 8.0 mm
+  Quantity: 24 pcs
+  Raw weight: 9.130 kg
+  Adjusted weight: 10.199 kg
+
+  Cost Components:
+    Material cost: 31.97 PLN
+      Weight: 10.199 kg
+      Price: 2.93 PLN/kg
+      With 7% margin: 31.97 PLN
+    Cutting cost: 0.00 PLN
+      Length: 2.00 m
+      Rate: 0.00 PLN/m
+    Contours: 0.50 PLN
+      Quantity: 5
+      Rate: 0.10 PLN/pc
+    Marking: 0.08 PLN
+    Defilm: 0.00 PLN
+    Operational overhead: 2.50 PLN
+    Technology overhead: 0.04 PLN
+
+  Final unit cost: 35.09 PLN
+  Total for 24 pcs: 842.16 PLN
+
+Part ID: 8 - Rew001_SO-H05-001_PAL_2520FIB_DASZEK_650
+------------------------------------------------------------
+  File: 2025.08.04 FW WYCENA 1035SUR082025-S235-8-Nitrogen(8).xlsx
+  Material: S235 8.0 mm
+  Quantity: 36 pcs
+  Raw weight: 15.510 kg
+  Adjusted weight: 17.326 kg
+
+  Cost Components:
+    Material cost: 54.32 PLN
+      Weight: 17.326 kg
+      Price: 2.93 PLN/kg
+      With 7% margin: 54.32 PLN
+    Cutting cost: 0.00 PLN
+      Length: 2.29 m
+      Rate: 0.00 PLN/m
+    Contours: 0.50 PLN
+      Quantity: 5
+      Rate: 0.10 PLN/pc
+    Marking: 0.08 PLN
+    Defilm: 0.00 PLN
+    Operational overhead: 2.50 PLN
+    Technology overhead: 0.04 PLN
+
+  Final unit cost: 57.44 PLN
+  Total for 36 pcs: 2067.84 PLN
+
+Part ID: 9 - Rew001_SO-G94-001_FIBER_PAL_BAZA_MOC_GRZEB
+------------------------------------------------------------
+  File: 2025.08.04 FW WYCENA 1035SUR082025-S235-8-Nitrogen(8).xlsx
+  Material: S235 8.0 mm
+  Quantity: 54 pcs
+  Raw weight: 0.310 kg
+  Adjusted weight: 0.346 kg
+
+  Cost Components:
+    Material cost: 1.09 PLN
+      Weight: 0.346 kg
+      Price: 2.93 PLN/kg
+      With 7% margin: 1.09 PLN
+    Cutting cost: 0.00 PLN
+      Length: 0.61 m
+      Rate: 0.00 PLN/m
+    Contours: 0.40 PLN
+      Quantity: 4
+      Rate: 0.10 PLN/pc
+    Marking: 0.07 PLN
+    Defilm: 0.00 PLN
+    Operational overhead: 2.50 PLN
+    Technology overhead: 0.04 PLN
+
+  Final unit cost: 4.09 PLN
+  Total for 54 pcs: 220.86 PLN
+
