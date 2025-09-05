@@ -181,7 +181,7 @@ total_material_cost = 0.0
 
 # ---- GUI ----
 root = tk.Tk()
-root.title("Cost Report Generator – Enhanced with Dynamic Margins")
+root.title("Cost Report Generator – Enhanced with Dynamic Margins and TKW Analysis")
 root.configure(bg="#2c2c2c")  # Dark background for modern look
 
 # Use a modern ttk theme
@@ -1913,7 +1913,7 @@ def generate_report():
         messagebox.showerror("Error", f"Failed to save DOCX file:\n{e}")
         return
 
-    # Generate Enhanced Cost Report with Margins.xlsx with FORMULAS and Polish notation
+   # Generate Enhanced Cost Report with Margins.xlsx with FORMULAS and Polish notation
     cost_wb = Workbook()
     
     # Set workbook locale to Polish
@@ -1926,14 +1926,11 @@ def generate_report():
     # Headers with Miniatura as second column - ALL IN POLISH
     headers = [
         "ID", "Miniatura", "Nazwa części", "Materiał", "Grubość [mm]", "Ilość [szt]",
-        "Waga jednostkowa [kg]", "Waga skorygowana [kg]", "Długość cięcia [m]",
-        "Ilość konturów", "Długość znakowania [m]", "Długość odfoliowania [m]",
-        "Cena materiału [PLN/kg]", "Stawka cięcia [PLN/m]", 
-        "Koszt materiału [PLN]", "Koszt cięcia [PLN]", "Koszt konturów [PLN]",
-        "Koszt znakowania [PLN]", "Koszt odfoliowania [PLN]",
+        "Waga jednostkowa [kg]", "Waga skorygowana [kg]",
+        "Cena materiału [PLN/kg]", "Koszt materiału [PLN]",
+        "Czas cięcia [h]", "Koszt cięcia [PLN]",
         "Koszt operacyjny [PLN]", "Koszt technologii [PLN]",
         "Gięcie [PLN]", "Koszty dodatkowe [PLN]",
-        "Obliczona marża mat. [%]", "Obliczona marża cięcia [%]",
         "Koszt jednostkowy [PLN]", "Koszt całkowity [PLN]"
     ]
     
@@ -1951,38 +1948,53 @@ def generate_report():
         extra_per_part = 0.0
         op_cost_per_part = 0.0
     
+    # Get TKW rates for calculations
+    oxygen_rate_tkw = _parse_float(oxygen_rate_entry_TKW.get()) or 262.50
+    nitrogen_rate_tkw = _parse_float(nitrogen_rate_entry_TKW.get()) or 412.50
+    al_nitrogen_rate_tkw = _parse_float(al_nitrogen_rate_entry_TKW.get()) or 487.50
+    bending_percent_tkw = _parse_float(bending_percent_entry_TKW.get()) or 75.0
+    
     # Data for corrected charts
     cost_components = {
         'Materiał': 0.0,
         'Cięcie laserowe': 0.0,
-        'Kontury': 0.0,
-        'Znakowanie': 0.0,
-        'Odfoliowanie': 0.0,
         'Koszty operacyjne': 0.0,
         'Technologia': 0.0,
         'Gięcie': 0.0,
         'Koszty dodatkowe': 0.0
     }
-    tkw = 0
+    tkw_total = 0.0
     row_num = 2
     for part in all_parts:
         # Calculate individual cost components
-        mat_cost = part['adj_weight'] * part.get('base_price_per_kg', 0.0) * 1.07
-        cut_cost = part.get('cut_length', 0.0) * part.get('base_rate_per_cut_length', 0.0)
-        contour_cost = part.get('contours_qty', 0.0) * part.get('rate_per_contour', 0.0)
-        marking_cost = part.get('marking_length', 0.0) * part.get('rate_per_marking_length', 0.0)
-        defilm_cost = part.get('defilm_length', 0.0) * part.get('rate_per_defilm_length', 0.0)
+        mat_cost = part['adj_weight'] * part.get('base_price_per_kg', 0.0) 
+        
+        # Get cutting time per part
+        part_cutting_time = part.get('cutting_time', 0.0)
+            
+        # Calculate TKW cutting cost based on gas type
+        gas_type = part.get('gas_type', 'O')
+        material_name = part.get('material', '')
+        
+        if gas_type == 'O':
+            cut_cost_tkw = part_cutting_time * oxygen_rate_tkw
+        elif gas_type == 'N':
+            if 'AL' in material_name.upper():
+                cut_cost_tkw = part_cutting_time * al_nitrogen_rate_tkw
+            else:
+                cut_cost_tkw = part_cutting_time * nitrogen_rate_tkw
+        else:
+            cut_cost_tkw = part_cutting_time * oxygen_rate_tkw  # Default to O2
+        
         bending_cost = part.get('bending_per_unit', 0.0)
+        bending_cost_tkw = bending_cost * (bending_percent_tkw / 100.0)
         
         # Accumulate for charts (multiply by quantity for total costs)
         cost_components['Materiał'] += mat_cost * part['qty']
-        cost_components['Cięcie laserowe'] += cut_cost * part['qty']
-        cost_components['Kontury'] += contour_cost * part['qty']
-        cost_components['Znakowanie'] += marking_cost * part['qty']
-        cost_components['Odfoliowanie'] += defilm_cost * part['qty']
+        cost_components['Cięcie laserowe'] += cut_cost_tkw * part['qty']
         cost_components['Koszty operacyjne'] += op_cost_per_part * part['qty']
         cost_components['Technologia'] += extra_per_part * part['qty']
-        cost_components['Gięcie'] += bending_cost * part['qty']
+        cost_components['Gięcie'] += bending_cost_tkw * part['qty']
         cost_components['Koszty dodatkowe'] += part.get('additional_per_unit', 0.0) * part['qty']
         
         # Write data with proper column order (Miniatura as column 2)
@@ -1992,175 +2004,75 @@ def generate_report():
         detail_ws.cell(row=row_num, column=4, value=part['material'])
         detail_ws.cell(row=row_num, column=5, value=part['thickness'])
         detail_ws.cell(row=row_num, column=6, value=part['qty'])
-        #detail_ws.cell(row=row_num, column=7, value=format_excel_number(part.get('raw_weight', 0.0)))
+        
+        # Waga jednostkowa [kg]
         cell = detail_ws.cell(row=row_num, column=7, value=float(part.get('raw_weight', 0.0)))
-        cell.number_format = '#,##0.00'  
-        #detail_ws.cell(row=row_num, column=8, value=format_excel_number(part.get('adj_weight', 0.0)))
+        cell.number_format = '#,##0.00'
+        
+        # Waga skorygowana [kg]
         cell = detail_ws.cell(row=row_num, column=8, value=float(part.get('adj_weight', 0.0)))
-        cell.number_format = '#,##0.00'         
-        #detail_ws.cell(row=row_num, column=9, value=format_excel_number(part.get('cut_length', 0.0)))
-        cell = detail_ws.cell(row=row_num, column=9, value=float(part.get('cut_length', 0.0)))
-        cell.number_format = '#,##0.00'         
-        #detail_ws.cell(row=row_num, column=10, value=part.get('contours_qty', 0))
-        cell = detail_ws.cell(row=row_num, column=10, value=float(part.get('contours_qty', 0.0)))
-        cell.number_format = '#,##0'         
-        #detail_ws.cell(row=row_num, column=11, value=format_excel_number(part.get('marking_length', 0.0)))
-        cell = detail_ws.cell(row=row_num, column=11, value=float(part.get('marking_length', 0.0)))
-        cell.number_format = '#,##0.00'         
-        #detail_ws.cell(row=row_num, column=12, value=format_excel_number(part.get('defilm_length', 0.0)))
-        cell = detail_ws.cell(row=row_num, column=12, value=float(part.get('defilm_length', 0.0)))
-        cell.number_format = '#,##0.00'         
-        #detail_ws.cell(row=row_num, column=13, value=format_excel_number(part.get('base_price_per_kg', 0.0)))
-        cell = detail_ws.cell(row=row_num, column=13, value=float(part.get('base_price_per_kg', 0.0)))
-        cell.number_format = '#,##0.00'         
-        #detail_ws.cell(row=row_num, column=14, value=format_excel_number(part.get('base_rate_per_cut_length', 0.0)))
-        cell = detail_ws.cell(row=row_num, column=14, value=float(part.get('base_rate_per_cut_length', 0.0)))
-        cell.number_format = '#,##0.00'         
+        cell.number_format = '#,##0.00'
         
-        # Cost formulas using Excel references
+        # Cena materiału [PLN/kg]
+        cell = detail_ws.cell(row=row_num, column=9, value=float(part.get('base_price_per_kg', 0.0)))
+        cell.number_format = '#,##0.00'
+        
+        # Koszt materiału [PLN] - formula
         col_letter = get_column_letter
-        # Material cost = raw cost
-        #detail_ws.cell(row=row_num, column=15).value = f"={col_letter(8)}{row_num}*{col_letter(13)}{row_num}"
-        cell = detail_ws.cell(row=row_num, column=15, value = f"={col_letter(8)}{row_num}*{col_letter(13)}{row_num}")
-        cell.number_format = '#,##0.00'         
-        # Cutting cost = Cutting length * Cutting rate
-        #detail_ws.cell(row=row_num, column=16).value = f"={col_letter(9)}{row_num}*{col_letter(14)}{row_num}"
-        cell = detail_ws.cell(row=row_num, column=16, value = f"={col_letter(9)}{row_num}*{col_letter(14)}{row_num}")
-        cell.number_format = '#,##0.00'         
-        # Contours cost = Contours qty * rate (need to add rate as constant or reference)
-        #detail_ws.cell(row=row_num, column=17, value=format_excel_number(contour_cost))
-        cell = detail_ws.cell(row=row_num, column=17, value = float(contour_cost))
-        cell.number_format = '#,##0.00'         
-        # Marking cost
-        #detail_ws.cell(row=row_num, column=18, value=format_excel_number(marking_cost))
-        cell = detail_ws.cell(row=row_num, column=18, value = float(marking_cost))
-        cell.number_format = '#,##0.00'         
-        # Defilm cost  
-        #detail_ws.cell(row=row_num, column=19, value=format_excel_number(defilm_cost))
-        cell = detail_ws.cell(row=row_num, column=19, value = float(defilm_cost))
-        cell.number_format = '#,##0.00'         
-        # Operational cost
-        #detail_ws.cell(row=row_num, column=20, value=format_excel_number(op_cost_per_part))
-        cell = detail_ws.cell(row=row_num, column=20, value = float(op_cost_per_part))
-        cell.number_format = '#,##0.00'         
-        # Technology cost
-        #detail_ws.cell(row=row_num, column=21, value=format_excel_number(extra_per_part))
-        cell = detail_ws.cell(row=row_num, column=21, value = float(extra_per_part))
-        cell.number_format = '#,##0.00'         
-        # Bending
-        #detail_ws.cell(row=row_num, column=22, value=format_excel_number(bending_cost))
-        cell = detail_ws.cell(row=row_num, column=22, value = float(bending_cost))
-        cell.number_format = '#,##0.00'         
-        # Additional
-        #detail_ws.cell(row=row_num, column=23, value=format_excel_number(part.get('additional_per_unit', 0.0)))
-        cell = detail_ws.cell(row=row_num, column=23, value = float(part.get('additional_per_unit', 0.0)))
-        cell.number_format = '#,##0.00'         
-        # Margins
-        #detail_ws.cell(row=row_num, column=24, value=format_excel_number(part.get('calculated_material_margin', 0.0)))
-        cell = detail_ws.cell(row=row_num, column=24, value = float(part.get('calculated_material_margin', 0.0)))
-        cell.number_format = '#,##0.00'         
-        #detail_ws.cell(row=row_num, column=25, value=format_excel_number(part.get('calculated_cutting_margin', 0.0)))
-        cell = detail_ws.cell(row=row_num, column=25, value = float(part.get('calculated_cutting_margin', 0.0)))
-        cell.number_format = '#,##0.00'         
+        cell = detail_ws.cell(row=row_num, column=10, value=f"={col_letter(8)}{row_num}*{col_letter(9)}{row_num}")
+        cell.number_format = '#,##0.00'
         
-        # Unit cost formula = SUM of all cost components
-        #detail_ws.cell(row=row_num, column=26).value = f"=SUM({col_letter(15)}{row_num}:{col_letter(23)}{row_num})"
-        cell = detail_ws.cell(row=row_num, column=26, value = f"=SUM({col_letter(15)}{row_num}:{col_letter(23)}{row_num})")
-        cell.number_format = '#,##0.00'         
-     
-        # Total cost formula = Unit cost * Quantity
-        #detail_ws.cell(row=row_num, column=27).value = f"={col_letter(26)}{row_num}*{col_letter(6)}{row_num}"
-        cell = detail_ws.cell(row=row_num, column=27, value = f"={col_letter(26)}{row_num}*{col_letter(6)}{row_num}")
-        cell.number_format = '#,##0.00'         
-     
-
-
-         # ADD IMAGE IN CELL (column 2)
-        # Helper functions for image sizing and placement
-        EMU_PER_PIXEL = 9525  # Excel drawing units
-
-        def _excel_col_width_to_pixels(col_width: float | None) -> int:
-            """
-            Approx. convert Excel column width (characters) to pixels.
-            8.43 -> ~64 px with Calibri 11. Use standard approximation.
-            """
-            if not col_width:  # None means default 8.43
-                col_width = 8.43
-            if col_width <= 0:
-                return 0
-            # Microsoft’s approximation widely used in openpyxl examples:
-            return int(round(col_width * 7 + 5))
-
-        def _points_to_pixels(points: float | None) -> int:
-            # Excel row height is in points; 1 pt = 1/72 in; screen ~96 dpi
-            if not points:  # None means default ~15 points (~20 px)
-                points = 15
-            return int(round(points * 96 / 72))
-
-        def add_image_inside_cell(ws, row: int, col: int, img_bytes: bytes, padding_px: int = 2):
-            """
-            Insert an image anchored to a single cell so it is contained within it
-            (top-left at cell corner, bottom-right at cell bottom-right).
-            """
-            # Compute cell pixel size
-            col_letter = get_column_letter(col)
-            col_px = _excel_col_width_to_pixels(ws.column_dimensions[col_letter].width)
-            row_px = _points_to_pixels(ws.row_dimensions[row].height)
-
-            # Fallback: if the row is too small, set a reasonable height
-            if row_px < 60:
-                ws.row_dimensions[row].height = 60  # points
-                row_px = _points_to_pixels(ws.row_dimensions[row].height)
-
-            # Prepare image
-            img = OpenpyxlImage(io.BytesIO(img_bytes))
-
-            # Bound the image to cell interior (with small padding)
-            draw_w = max(1, col_px - 2 * padding_px)
-            draw_h = max(1, row_px - 2 * padding_px)
-
-            # Build two-cell anchor from cell top-left to cell bottom-right
-            # openpyxl uses 0-based row/col in AnchorMarker
-            start = AnchorMarker(col=col - 1, row=row - 1,
-                                    colOff=padding_px * EMU_PER_PIXEL,
-                                    rowOff=padding_px * EMU_PER_PIXEL)
-            end = AnchorMarker(col=col - 1, row=row - 1,
-                                colOff=(padding_px + draw_w) * EMU_PER_PIXEL,
-                                rowOff=(padding_px + draw_h) * EMU_PER_PIXEL)
-            img.anchor = TwoCellAnchor(_from=start, to=end, editAs="twoCell")
-
-            ws.add_image(img)
-
-        # Miniatura (column 2)
-        fill_color = "F2F2F2" if idx % 2 == 0 else "FFFFFF"
-        cell = detail_ws.cell(row=row_num, column=2, value='')
-        cell.fill = PatternFill(start_color=fill_color, end_color=fill_color, fill_type="solid")
-
+        # Czas cięcia [h]
+        cell = detail_ws.cell(row=row_num, column=11, value=float(part_cutting_time))
+        cell.number_format = '#,##0.0000'
+        
+        # Koszt cięcia [PLN] - based on cutting time
+        cell = detail_ws.cell(row=row_num, column=12, value=float(cut_cost_tkw))
+        cell.number_format = '#,##0.00'
+        
+        # Koszt operacyjny [PLN]
+        cell = detail_ws.cell(row=row_num, column=13, value=float(op_cost_per_part))
+        cell.number_format = '#,##0.00'
+        
+        # Koszt technologii [PLN]
+        cell = detail_ws.cell(row=row_num, column=14, value=float(extra_per_part))
+        cell.number_format = '#,##0.00'
+        
+        # Gięcie [PLN]
+        cell = detail_ws.cell(row=row_num, column=15, value=float(bending_cost))
+        cell.number_format = '#,##0.00'
+        
+        # Koszty dodatkowe [PLN]
+        cell = detail_ws.cell(row=row_num, column=16, value=float(part.get('additional_per_unit', 0.0)))
+        cell.number_format = '#,##0.00'
+        
+        # Koszt jednostkowy [PLN] - sum of all components
+        cell = detail_ws.cell(row=row_num, column=17, value=f"=SUM({col_letter(10)}{row_num}:{col_letter(16)}{row_num})")
+        cell.number_format = '#,##0.00'
+        
+        # Koszt całkowity [PLN] - unit cost * quantity
+        cell = detail_ws.cell(row=row_num, column=18, value=f"={col_letter(17)}{row_num}*{col_letter(6)}{row_num}")
+        cell.number_format = '#,##0.00'
+        
+        # Add thumbnail in column 2 (B)
         if part.get('thumb_data'):
             try:
-                add_image_inside_cell(detail_ws, row=row_num, col=2, img_bytes=part['thumb_data'], padding_px=2)
+                img = OpenpyxlImage(io.BytesIO(part['thumb_data']))
+                img.width = 60
+                img.height = 40
+                detail_ws.add_image(img, f'B{row_num}')
+                detail_ws.row_dimensions[row_num].height = 45
             except Exception as e:
-                # optionally log error
-                pass
-
-
-        # Add thumbnail in column 2 (B)
-        #if part.get('thumb_data'):
-        #    try:
-        #        img = OpenpyxlImage(io.BytesIO(part['thumb_data']))
-        #        img.width = 100
-        #        img.height = 60
-        #        detail_ws.add_image(img, f'B{row_num}')
-        #        detail_ws.row_dimensions[row_num].height = 70
-        #    except Exception as e:
-        #        analysis_logger.log(f"Failed to add thumbnail for part {part['id']}: {str(e)}", "WARNING")
+                analysis_logger.log(f"Failed to add thumbnail for part {part['id']}: {str(e)}", "WARNING")
         
         # Format cells
-        for col in range(1, 28):
+        for col in range(1, 19):
             cell = detail_ws.cell(row=row_num, column=col)
             if col >= 4:  # Numeric columns (after material name)
                 cell.alignment = Alignment(horizontal="right")
-        tkw = tkw + float(part.get('base_cost_per_unit',0.0))*float(part.get('qty',0.0))
+        
+        # Calculate TKW total
+        tkw_total += (mat_cost + cut_cost_tkw + op_cost_per_part + extra_per_part + bending_cost_tkw) * part['qty']
         row_num += 1
     
     # Add totals row with formulas
@@ -2168,10 +2080,10 @@ def generate_report():
     detail_ws.cell(row=total_row, column=3, value="SUMA").font = Font(bold=True)
     
     # Total cost formula
-    #detail_ws.cell(row=total_row, column=27).value = f"=SUM({col_letter(27)}2:{col_letter(27)}{row_num-1})"
-    detail_ws.cell(row=total_row, column=27).font = Font(bold=True)
-    cell = detail_ws.cell(row=total_row, column=27, value = f"=SUM({col_letter(27)}2:{col_letter(27)}{row_num-1})")
-    cell.number_format = '#,##0.00'         
+    detail_ws.cell(row=total_row, column=18).font = Font(bold=True)
+    cell = detail_ws.cell(row=total_row, column=18, value = f"=SUM({col_letter(18)}2:{col_letter(18)}{row_num-1})")
+    cell.number_format = '#,##0.00'
+    
     # Autofit columns with specific widths
     column_widths = {
         'A': 8,   # ID
@@ -2220,16 +2132,12 @@ def generate_report():
     row = 4
     for fm in file_margins:
         margin_ws.cell(row=row, column=1, value=fm['filename'])
-        #margin_ws.cell(row=row, column=2, value=float(fm['material_margin']))
         cell = margin_ws.cell(row=row, column=2, value=float(fm['material_margin']))
         cell.number_format = '#,##0.00'  
-        #margin_ws.cell(row=row, column=3, value=float(fm['cutting_margin']))
         cell = margin_ws.cell(row=row, column=3, value=float(fm['cutting_margin']))
         cell.number_format = '#,##0.00'  
-        #margin_ws.cell(row=row, column=4, value=float(fm['total_area']))
         cell = margin_ws.cell(row=row, column=4, value=float(fm['total_area']))
         cell.number_format = '#,##0.00'  
-        #margin_ws.cell(row=row, column=5, value=float(fm['total_cutting']))
         cell = margin_ws.cell(row=row, column=5, value=float(fm['total_cutting']))
         cell.number_format = '#,##0.00'  
         margin_ws.cell(row=row, column=6, value=fm['row_count'])
@@ -2238,12 +2146,10 @@ def generate_report():
     # Overall averages with formulas
     margin_ws.cell(row=row+1, column=1, value="ŚREDNIE WARTOŚCI").font = Font(bold=True)
     margin_ws.cell(row=row+2, column=1, value="Średnia marża materiałowa:")
-    #margin_ws.cell(row=row+2, column=2, value=format_excel_number(avg_material_margin) + "%").font = Font(bold=True, color="008000")
     cell = margin_ws.cell(row=row+2, column=2, value=float(avg_material_margin/100))
     cell.font = Font(bold=True, color="008000")
     cell.number_format = '0.00 %'  
     margin_ws.cell(row=row+3, column=1, value="Średnia marża cięcia:")
-    #margin_ws.cell(row=row+3, column=2, value=format_excel_number(avg_cutting_margin) + "%").font = Font(bold=True, color="008000")
     cell = margin_ws.cell(row=row+3, column=2, value=float(avg_cutting_margin/100))
     cell.font = Font(bold=True, color="008000")
     cell.number_format = '0.00 %'  
@@ -2283,7 +2189,7 @@ def generate_report():
         analysis_ws[cell].fill = PatternFill(start_color="D9D9D9", end_color="D9D9D9", fill_type="solid")
     
     # Filter out zero-value components for cleaner display
-    total_costs = tkw #sum(cost_components.values())
+    total_costs = tkw_total  # Use TKW total instead of sum(cost_components.values())
     active_components = [(k, v) for k, v in cost_components.items() if v > 0]
     
     row = 4
@@ -2314,7 +2220,7 @@ def generate_report():
     
     client_price = total_price_per_order
     
-    analysis_ws.cell(row=row, column=1, value="Koszty całkowite:")
+    analysis_ws.cell(row=row, column=1, value="Rzeczywiste koszty TKW:")
     cell = analysis_ws.cell(row=row, column=2, value=float(total_costs))
     cell.number_format = '#,##0.00 PLN'  
     row += 1
@@ -2337,10 +2243,34 @@ def generate_report():
     cell.number_format = '0.00%'  
     analysis_ws[f'B{row}'].font = Font(bold=True, color="008000")
     
+    # Add additional TKW rates information
+    row += 2
+    analysis_ws.cell(row=row, column=1, value="STAWKI TKW UŻYTE W KALKULACJI:").font = Font(bold=True)
+    row += 1
+    
+    analysis_ws.cell(row=row, column=1, value="O₂ cutting rate TKW:")
+    cell = analysis_ws.cell(row=row, column=2, value=float(oxygen_rate_tkw))
+    cell.number_format = '#,##0.00 PLN/h'
+    row += 1
+    
+    analysis_ws.cell(row=row, column=1, value="N₂ cutting rate TKW:")
+    cell = analysis_ws.cell(row=row, column=2, value=float(nitrogen_rate_tkw))
+    cell.number_format = '#,##0.00 PLN/h'
+    row += 1
+    
+    analysis_ws.cell(row=row, column=1, value="AL N₂ cutting rate TKW:")
+    cell = analysis_ws.cell(row=row, column=2, value=float(al_nitrogen_rate_tkw))
+    cell.number_format = '#,##0.00 PLN/h'
+    row += 1
+    
+    analysis_ws.cell(row=row, column=1, value="Bending percent TKW:")
+    cell = analysis_ws.cell(row=row, column=2, value=float(bending_percent_tkw/100))
+    cell.number_format = '0.00%'
+    
     # Create pie chart for cost structure
     if len(active_components) > 0:
         pie = PieChart()
-        pie.title = "Struktura kosztów [%]"
+        pie.title = "Struktura kosztów TKW [%]"
         
         # Prepare data for chart
         labels = Reference(analysis_ws, min_col=1, min_row=4, max_row=3+len(active_components))
@@ -2348,9 +2278,9 @@ def generate_report():
         
         pie.add_data(data, titles_from_data=True)
         pie.set_categories(labels)
-        pie.width = 15
-        pie.height = 10
-        
+        pie.width = 20
+        pie.height = 21
+
         # Add data labels
         pie.dataLabels = DataLabelList()
         pie.dataLabels.showPercent = True
