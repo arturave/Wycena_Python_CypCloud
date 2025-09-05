@@ -27,6 +27,8 @@ from openpyxl.drawing.image import Image as OpenpyxlImage
 from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
 from openpyxl.chart import PieChart, BarChart, Reference
 from openpyxl.chart.label import DataLabelList
+from openpyxl.utils.units import pixels_to_EMU
+from openpyxl.drawing.spreadsheet_drawing import AnchorMarker, OneCellAnchor
 from openpyxl.utils import get_column_letter
 from docx import Document
 from docx.shared import Inches, RGBColor, Pt, Cm
@@ -37,6 +39,13 @@ import io
 from PIL import Image, ImageTk
 import locale
 import requests
+import io
+from openpyxl.drawing.image import Image as OpenpyxlImage
+from openpyxl.drawing.spreadsheet_drawing import AnchorMarker, TwoCellAnchor
+from openpyxl.styles import PatternFill
+from openpyxl.utils import get_column_letter
+from openpyxl.utils.units import pixels_to_EMU
+
 
 def SetTotalPricePerOrder(value):
     global total_price_per_order
@@ -90,7 +99,7 @@ def _parse_float(val):
 def _map_gas_to_key(gas_raw: str) -> str:
     """Maps the gas name to the key 'N' or 'O'."""
     g = _norm_s(gas_raw)
-    if g in {"NITROGEN", "AZOT", "氮气", "N"}:
+    if g in {"NITROGEN", "AZOT", "氮气", "N", "高压氮气"}:
         return "N"
     if g in {"OXYGEN", "TLEN", "氧气", "O"}:
         return "O"
@@ -2064,16 +2073,87 @@ def generate_report():
         cell = detail_ws.cell(row=row_num, column=27, value = f"={col_letter(26)}{row_num}*{col_letter(6)}{row_num}")
         cell.number_format = '#,##0.00'         
      
-        # Add thumbnail in column 2 (B)
+
+
+         # ADD IMAGE IN CELL (column 2)
+        # Helper functions for image sizing and placement
+        EMU_PER_PIXEL = 9525  # Excel drawing units
+
+        def _excel_col_width_to_pixels(col_width: float | None) -> int:
+            """
+            Approx. convert Excel column width (characters) to pixels.
+            8.43 -> ~64 px with Calibri 11. Use standard approximation.
+            """
+            if not col_width:  # None means default 8.43
+                col_width = 8.43
+            if col_width <= 0:
+                return 0
+            # Microsoft’s approximation widely used in openpyxl examples:
+            return int(round(col_width * 7 + 5))
+
+        def _points_to_pixels(points: float | None) -> int:
+            # Excel row height is in points; 1 pt = 1/72 in; screen ~96 dpi
+            if not points:  # None means default ~15 points (~20 px)
+                points = 15
+            return int(round(points * 96 / 72))
+
+        def add_image_inside_cell(ws, row: int, col: int, img_bytes: bytes, padding_px: int = 2):
+            """
+            Insert an image anchored to a single cell so it is contained within it
+            (top-left at cell corner, bottom-right at cell bottom-right).
+            """
+            # Compute cell pixel size
+            col_letter = get_column_letter(col)
+            col_px = _excel_col_width_to_pixels(ws.column_dimensions[col_letter].width)
+            row_px = _points_to_pixels(ws.row_dimensions[row].height)
+
+            # Fallback: if the row is too small, set a reasonable height
+            if row_px < 60:
+                ws.row_dimensions[row].height = 60  # points
+                row_px = _points_to_pixels(ws.row_dimensions[row].height)
+
+            # Prepare image
+            img = OpenpyxlImage(io.BytesIO(img_bytes))
+
+            # Bound the image to cell interior (with small padding)
+            draw_w = max(1, col_px - 2 * padding_px)
+            draw_h = max(1, row_px - 2 * padding_px)
+
+            # Build two-cell anchor from cell top-left to cell bottom-right
+            # openpyxl uses 0-based row/col in AnchorMarker
+            start = AnchorMarker(col=col - 1, row=row - 1,
+                                    colOff=padding_px * EMU_PER_PIXEL,
+                                    rowOff=padding_px * EMU_PER_PIXEL)
+            end = AnchorMarker(col=col - 1, row=row - 1,
+                                colOff=(padding_px + draw_w) * EMU_PER_PIXEL,
+                                rowOff=(padding_px + draw_h) * EMU_PER_PIXEL)
+            img.anchor = TwoCellAnchor(_from=start, to=end, editAs="twoCell")
+
+            ws.add_image(img)
+
+        # Miniatura (column 2)
+        fill_color = "F2F2F2" if idx % 2 == 0 else "FFFFFF"
+        cell = detail_ws.cell(row=row_num, column=2, value='')
+        cell.fill = PatternFill(start_color=fill_color, end_color=fill_color, fill_type="solid")
+
         if part.get('thumb_data'):
             try:
-                img = OpenpyxlImage(io.BytesIO(part['thumb_data']))
-                img.width = 60
-                img.height = 40
-                detail_ws.add_image(img, f'B{row_num}')
-                detail_ws.row_dimensions[row_num].height = 45
+                add_image_inside_cell(detail_ws, row=row_num, col=2, img_bytes=part['thumb_data'], padding_px=2)
             except Exception as e:
-                analysis_logger.log(f"Failed to add thumbnail for part {part['id']}: {str(e)}", "WARNING")
+                # optionally log error
+                pass
+
+
+        # Add thumbnail in column 2 (B)
+        #if part.get('thumb_data'):
+        #    try:
+        #        img = OpenpyxlImage(io.BytesIO(part['thumb_data']))
+        #        img.width = 100
+        #        img.height = 60
+        #        detail_ws.add_image(img, f'B{row_num}')
+        #        detail_ws.row_dimensions[row_num].height = 70
+        #    except Exception as e:
+        #        analysis_logger.log(f"Failed to add thumbnail for part {part['id']}: {str(e)}", "WARNING")
         
         # Format cells
         for col in range(1, 28):
@@ -2336,9 +2416,9 @@ def generate_report():
     client_ws['A6'].fill = PatternFill(start_color="366092", end_color="366092", fill_type="solid")
     client_ws.row_dimensions[6].height = 3
     
-    # Column headers for client report
+     # Column headers for client report
     headers = [
-        "ID", "Part name", "Material", 
+        "ID", "Miniatura", "Part name", "Material", 
         "Thickness [mm]", "Unit weight [kg]", 
         "Quantity [pcs]", "Unit cost [PLN]", "Total cost [PLN]"
     ]
@@ -2354,7 +2434,8 @@ def generate_report():
             right=Side(style='thin'),
             top=Side(style='thin'),
             bottom=Side(style='thin')
-        )
+        ) 
+        
     
     # Add data rows with alternating colors
     data_start_row = header_row + 1
@@ -2367,69 +2448,164 @@ def generate_report():
         fill_color = "F2F2F2" if idx % 2 == 0 else "FFFFFF"
         
         unit_total = part['cost_per_unit'] + part['bending_per_unit'] + part['additional_per_unit']
+        total_part = unit_total * part['qty']
+        client_total += total_part
         
         # ID
-        cell = client_ws.cell(row=row_num, column=1, value=float(part['id']))
+        cell = client_ws.cell(row=row_num, column=1, value=part['id'])
         cell.fill = PatternFill(start_color=fill_color, end_color=fill_color, fill_type="solid")
         cell.alignment = Alignment(horizontal="center")
         cell.border = Border(left=Side(style='thin'), right=Side(style='thin'))
-        cell.number_format = '#,##0.00'
         
-        # Other columns with Polish notation
-        client_ws.cell(row=row_num, column=2, value=part['name'])
-        client_ws.cell(row=row_num, column=3, value=part['material'])
-        client_ws.cell(row=row_num, column=4, value=part['thickness'])
-        #client_ws.cell(row=row_num, column=5, value=format_excel_number(part.get('raw_weight', 0.0)))
-        cell = client_ws.cell(row=row, column=5, value=part.get('raw_weight', 0.0))
-        cell.number_format = '#,##0.00'
-        client_ws.cell(row=row_num, column=6, value=part['qty'])
-        #client_ws.cell(row=row_num, column=7, value=(unit_total))
-        cell = client_ws.cell(row=row, column=7, value=unit_total)
-        cell.number_format = '#,##0'
         
-        # Total cost formula
-        #client_ws.cell(row=row_num, column=8).value = f"=F{row_num}*G{row_num}"
-        cell = client_ws.cell(row=row, column=8, value=f"=F{row_num}*G{row_num}")
-        cell.number_format = '#,##0.00'
+        # ADD IMAGE IN CELL (column 2)
+        # Helper functions for image sizing and placement
+        EMU_PER_PIXEL = 9525  # Excel drawing units
+
+        def _excel_col_width_to_pixels(col_width: float | None) -> int:
+            """
+            Approx. convert Excel column width (characters) to pixels.
+            8.43 -> ~64 px with Calibri 11. Use standard approximation.
+            """
+            if not col_width:  # None means default 8.43
+                col_width = 8.43
+            if col_width <= 0:
+                return 0
+            # Microsoft’s approximation widely used in openpyxl examples:
+            return int(round(col_width * 7 + 5))
+
+        def _points_to_pixels(points: float | None) -> int:
+            # Excel row height is in points; 1 pt = 1/72 in; screen ~96 dpi
+            if not points:  # None means default ~15 points (~20 px)
+                points = 15
+            return int(round(points * 96 / 72))
+
+        def add_image_inside_cell(ws, row: int, col: int, img_bytes: bytes, padding_px: int = 2):
+            """
+            Insert an image anchored to a single cell so it is contained within it
+            (top-left at cell corner, bottom-right at cell bottom-right).
+            """
+            # Compute cell pixel size
+            col_letter = get_column_letter(col)
+            col_px = _excel_col_width_to_pixels(ws.column_dimensions[col_letter].width)
+            row_px = _points_to_pixels(ws.row_dimensions[row].height)
+
+            # Fallback: if the row is too small, set a reasonable height
+            if row_px < 60:
+                ws.row_dimensions[row].height = 60  # points
+                row_px = _points_to_pixels(ws.row_dimensions[row].height)
+
+            # Prepare image
+            img = OpenpyxlImage(io.BytesIO(img_bytes))
+
+            # Bound the image to cell interior (with small padding)
+            draw_w = max(1, col_px - 2 * padding_px)
+            draw_h = max(1, row_px - 2 * padding_px)
+
+            # Build two-cell anchor from cell top-left to cell bottom-right
+            # openpyxl uses 0-based row/col in AnchorMarker
+            start = AnchorMarker(col=col - 1, row=row - 1,
+                                    colOff=padding_px * EMU_PER_PIXEL,
+                                    rowOff=padding_px * EMU_PER_PIXEL)
+            end = AnchorMarker(col=col - 1, row=row - 1,
+                                colOff=(padding_px + draw_w) * EMU_PER_PIXEL,
+                                rowOff=(padding_px + draw_h) * EMU_PER_PIXEL)
+            img.anchor = TwoCellAnchor(_from=start, to=end, editAs="twoCell")
+
+            ws.add_image(img)
+
+        # Miniatura (column 2)
+        cell = client_ws.cell(row=row_num, column=2, value='')
+        cell.fill = PatternFill(start_color=fill_color, end_color=fill_color, fill_type="solid")
+
+        if part.get('thumb_data'):
+            try:
+                add_image_inside_cell(client_ws, row=row_num, col=2, img_bytes=part['thumb_data'], padding_px=2)
+            except Exception as e:
+                # optionally log error
+                pass
+
+               
+        # Other columns
+        values = [
+            part['name'],
+            part['material'],
+            part['thickness'],
+            f"{part.get('raw_weight', 0.0):.3f}",
+            part['qty'],
+            f"{unit_total:.2f}",
+            f"{total_part:.2f}"
+        ]
         
-        # Apply formatting
-        for col in range(2, 9):
-            cell = client_ws.cell(row=row_num, column=col)
+        for col, value in enumerate(values, 3):
+            cell = client_ws.cell(row=row_num, column=col, value=value)
             cell.fill = PatternFill(start_color=fill_color, end_color=fill_color, fill_type="solid")
-            if col in [4, 5, 7, 8]:  # Numeric columns
-                cell.alignment = Alignment(horizontal="right")
+            if col in [5, 6, 8, 9]:  # Numeric columns
+                cell.alignment = Alignment(horizontal="right",wrap_text=True)
+            if col in [2, 3]:  # text
+                cell.alignment = Alignment(horizontal="left",vertical="center", wrap_text=True)
             cell.border = Border(left=Side(style='thin'), right=Side(style='thin'))
     
-    # Total row with formula
+    # Total row
     total_row = data_start_row + len(all_parts)
-    client_ws.merge_cells(f'A{total_row}:E{total_row}')
-    cell = client_ws.cell(row=total_row, column=1, value="RAZEM")
+    client_ws.merge_cells(f'A{total_row}:F{total_row}')
+    cell = client_ws.cell(row=total_row, column=1, value="TOTAL")
     cell.font = Font(bold=True, size=12)
     cell.fill = PatternFill(start_color="D9D9D9", end_color="D9D9D9", fill_type="solid")
     cell.alignment = Alignment(horizontal="right")
-    cell.number_format = '#,##0.00'
     
-    for col in range(6, 8):
+    for col in range(7, 9):
         cell = client_ws.cell(row=total_row, column=col, value="")
         cell.fill = PatternFill(start_color="D9D9D9", end_color="D9D9D9", fill_type="solid")
     
-    # Total formula
-    client_ws.cell(row=total_row, column=8).value = f"=SUM(H{data_start_row}:H{total_row-1})"
-    client_ws.cell(row=total_row, column=8).font = Font(bold=True, size=12)
-    client_ws.cell(row=total_row, column=8).fill = PatternFill(start_color="D9D9D9", end_color="D9D9D9", fill_type="solid")
-    client_ws.cell(row=total_row, column=8).alignment = Alignment(horizontal="right")
-    client_ws.cell(row=total_row, column=8).border = Border(top=Side(style='double'), bottom=Side(style='double'))
+    cell = client_ws.cell(row=total_row, column=9, value=f"{client_total:.2f}")
+    cell.font = Font(bold=True, size=12)
+    cell.fill = PatternFill(start_color="D9D9D9", end_color="D9D9D9", fill_type="solid")
+    cell.alignment = Alignment(horizontal="right")
+    cell.border = Border(top=Side(style='double'), bottom=Side(style='double'))
+    
+    # Add closing text with disclaimers
+    disclaimer_start = total_row + 3
+    client_ws.merge_cells(f'A{disclaimer_start}:I{disclaimer_start}')
+    client_ws[f'A{disclaimer_start}'] = "IMPLEMENTATION CONDITIONS"
+    client_ws[f'A{disclaimer_start}'].font = Font(bold=True, size=11)
+    
+    disclaimers = [
+        "1. Order implementation follows offer acceptance and submission of technical documentation.",
+        "2. Delivery time: to be agreed, standard 5-7 working days.",
+        "3. Prices do not include transportation costs.",
+        "4. Liability exclusions:",
+        "   • For errors in the provided technical documentation",
+        "   • For defects in the material provided",
+        "   • For damages resulting from force majeure",
+        "5. Payment: transfer 14 days from the invoice VAT date."
+    ]
+    
+    for idx, text in enumerate(disclaimers):
+        row = disclaimer_start + idx + 1
+        client_ws.merge_cells(f'A{row}:I{row}')
+        client_ws[f'A{row}'] = text
+        client_ws[f'A{row}'].font = Font(size=9)
+        client_ws[f'A{row}'].alignment = Alignment(wrap_text=True)
+    
+    # Footer with contact info
+    footer_row = disclaimer_start + len(disclaimers) + 3
+    client_ws.merge_cells(f'A{footer_row}:I{footer_row}')
+    client_ws[f'A{footer_row}'] = "Laser Team | Tel: +48 537 883 393 | Email: laser@konstal.com"
+    client_ws[f'A{footer_row}'].font = Font(size=10, italic=True)
+    client_ws[f'A{footer_row}'].alignment = Alignment(horizontal="center")
     
     # Set column widths
     column_widths = {
         'A': 8,   # ID
-        'B': 35,  # Part name
-        'C': 15,  # Material
-        'D': 12,  # Thickness
-        'E': 18,  # Weight
-        'F': 10,  # Quantity
-        'G': 18,  # Unit cost
-        'H': 18   # Total cost
+        'B': 20,  # Miniatura
+        'C': 35,  # Part name
+        'D': 15,  # Material
+        'E': 12,  # Thickness
+        'F': 18,  # Weight
+        'G': 10,  # Quantity
+        'H': 18,  # Unit cost
+        'I': 18   # Total cost
     }
     
     for col, width in column_widths.items():
