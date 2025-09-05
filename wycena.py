@@ -39,12 +39,264 @@ import io
 from PIL import Image, ImageTk
 import locale
 import requests
-import io
-from openpyxl.drawing.image import Image as OpenpyxlImage
 from openpyxl.drawing.spreadsheet_drawing import AnchorMarker, TwoCellAnchor
-from openpyxl.styles import PatternFill
 from openpyxl.utils import get_column_letter
 from openpyxl.utils.units import pixels_to_EMU
+import base64, json
+
+
+
+# ========= SAVE / LOAD PROJECT (one-file JSON with base64 images) =========
+def _b64_encode(b: bytes) -> str:
+    return base64.b64encode(b).decode("ascii") if b is not None else ""
+
+def _b64_decode(s: str) -> bytes:
+    try:
+        return base64.b64decode(s.encode("ascii")) if s else b""
+    except Exception:
+        return b""
+
+def save_project_ui():
+    """Ask for file and save current state (parts, calculations, margins, texts, pictures)."""
+
+    folder_path = folder_var.get()
+    if not folder_path:
+        analysis_logger.log("No folder selected", "ERROR")
+        messagebox.showerror("Error", "Please select a folder.")
+        return
+
+    current_date = datetime.datetime.now().strftime("%Y%m%d")
+
+    customer_name = customer_var.get().strip() or "Client"
+    offer_number = offer_var.get().strip()
+    if not offer_number:
+        offer_number = get_next_offer_number()
+        offer_var.set(offer_number)
+
+    fname = f"Oferta_{sanitize_filename(customer_name) or 'Klient'}_{current_date}_{offer_number.replace('/', '-')}.lpf"
+    full_name = os.path.join(folder_path, fname)
+
+    path = filedialog.asksaveasfilename(
+        title="Save project",
+        defaultextension=".lpf",
+        filetypes=[("Laser Project File", "*.lpf"), ("JSON", "*.json"), ("All files", "*.*")],
+        initialdir=folder_path,   # domyślny katalog
+        initialfile=fname         # domyślna nazwa pliku
+    )
+
+    if not path:
+        return
+
+    try:
+        # collect parts from tree + all_parts (thumbs)
+        parts_payload = []
+        tree_items = list(tree.get_children())
+        for i, iid in enumerate(tree_items):
+            # pomijamy wiersz TOTAL jeśli jest
+            if iid == total_row_iid:
+                continue
+            vals = list(tree.item(iid, "values"))
+            # Safeguard dla indeksów
+            vals += [""] * (11 - len(vals))
+            # domyślne dane z 'all_parts'
+            thumb_b64 = ""
+            if i < len(all_parts):
+                thumb_b64 = _b64_encode(all_parts[i].get("thumb_data") or b"")
+            parts_payload.append({
+                "values": vals,                # kolumny TreeView
+                "thumb_b64": thumb_b64,        # miniatura (base64)
+                "cost_per_unit": all_parts[i].get("cost_per_unit") if i < len(all_parts) else None,
+                "qty": all_parts[i].get("qty") if i < len(all_parts) else None,
+                "bending_per_unit": all_parts[i].get("bending_per_unit") if i < len(all_parts) else None,
+                "additional_per_unit": all_parts[i].get("additional_per_unit") if i < len(all_parts) else None,
+            })
+
+        payload = {
+            "meta": {
+                "saved_at": datetime.datetime.now().isoformat(),
+                "app": "wycena.py",
+            },
+            "header": {
+                "folder": folder_var.get(),
+                "customer": customer_var.get(),
+                "offer": offer_var.get(),
+                "date": date_var.get(),
+                "validity": validity_var.get(),
+                "logo": logo_var.get(),
+            },
+            "texts": {
+                "contact": contact_text.get("1.0", "end-1c"),
+                "preceding": preceding_text_var.get("1.0", "end-1c"),
+                "finishing": finishing_text_var.get("1.0", "end-1c"),
+            },
+            "fixed_costs": {
+                "op_cost_per_sheet": op_cost_entry.get(),
+                "tech_order": tech_order_entry.get(),
+                "add_order": add_order_cost_entry.get(),
+            },
+            "rates": {
+                "O_rate": oxygen_rate_entry.get(),
+                "N_rate": nitrogen_rate_entry.get(),
+                "ALN_rate": al_nitrogen_rate_entry.get(),
+                "O_rate_tkw": oxygen_rate_entry_TKW.get(),
+                "N_rate_tkw": nitrogen_rate_entry_TKW.get(),
+                "ALN_rate_tkw": al_nitrogen_rate_entry_TKW.get(),
+                "bend_percent_tkw": bending_percent_entry_TKW.get(),
+            },
+            "margins": {
+                "material": material_margin_var.get(),
+                "cutting": cutting_margin_var.get(),
+                "min_area": min_area_var.get(),
+                "max_area": max_area_var.get(),
+                "min_cut_len": min_cutting_var.get(),
+                "max_cut_len": max_cutting_var.get(),
+            },
+            "calculated": {
+                "oxygen_cutting_time": oxygen_cutting_time,
+                "nitrogen_cutting_time": nitrogen_cutting_time,
+                "aluminum_nitrogen_cutting_time": aluminum_nitrogen_cutting_time,
+                "total_material_cost": total_material_cost,
+                "total_price_per_order": float(total_price_per_order) if total_price_per_order else 0.0,
+                "labels": {
+                    "oxygen_time": oxygen_time_label.cget("text"),
+                    "nitrogen_time": nitrogen_time_label.cget("text"),
+                    "oxygen_cost": oxygen_cost_label.cget("text"),
+                    "nitrogen_cost": nitrogen_cost_label.cget("text"),
+                    "material_cost": material_cost_label.cget("text"),
+                    "total_cutting_cost": total_cutting_cost_label.cget("text"),
+                    "operational_cost": operational_cost_label.cget("text"),
+                    "total_all_costs": total_all_costs_label.cget("text"),
+                    "total_for_correction": total_all_costs_entry.get(),
+                }
+            },
+            "parts": parts_payload
+        }
+
+        with open(path, "w", encoding="utf-8") as f:
+            json.dump(payload, f, ensure_ascii=False, indent=2)
+
+        analysis_logger.log(f"Project saved: {os.path.basename(path)}", "SUCCESS")
+        messagebox.showinfo("Saved", f"Project saved to:\n{path}")
+
+    except Exception as e:
+        analysis_logger.log(f"Save failed: {e}", "ERROR")
+        messagebox.showerror("Error", f"Save failed:\n{e}")
+
+def load_project_ui():
+    """Open project file and restore full UI (parts, images, fields, labels)."""
+    path = filedialog.askopenfilename(
+        title="Open project",
+        filetypes=[("Laser Project File", "*.lpf *.json"), ("All files", "*.*")]
+    )
+    if not path:
+        return
+
+    try:
+        with open(path, "r", encoding="utf-8") as f:
+            payload = json.load(f)
+    except Exception as e:
+        messagebox.showerror("Error", f"Cannot open file:\n{e}")
+        return
+
+    try:
+        # header
+        folder_var.set(payload["header"].get("folder", ""))
+        customer_var.set(payload["header"].get("customer", ""))
+        offer_var.set(payload["header"].get("offer", ""))
+        date_var.set(payload["header"].get("date", ""))
+        validity_var.set(payload["header"].get("validity", ""))
+        logo_var.set(payload["header"].get("logo", ""))
+
+        # texts
+        contact_text.delete("1.0", "end"); contact_text.insert("1.0", payload["texts"].get("contact", ""))
+        preceding_text_var.delete("1.0", "end"); preceding_text_var.insert("1.0", payload["texts"].get("preceding", ""))
+        finishing_text_var.delete("1.0", "end"); finishing_text_var.insert("1.0", payload["texts"].get("finishing", ""))
+
+        # fixed costs
+        op_cost_entry.delete(0, "end"); op_cost_entry.insert(0, payload["fixed_costs"].get("op_cost_per_sheet", "0,00"))
+        tech_order_entry.delete(0, "end"); tech_order_entry.insert(0, payload["fixed_costs"].get("tech_order", "0,00"))
+        add_order_cost_entry.delete(0, "end"); add_order_cost_entry.insert(0, payload["fixed_costs"].get("add_order", "0,00"))
+
+        # rates (left + right column)
+        oxygen_rate_entry.delete(0,"end"); oxygen_rate_entry.insert(0, payload["rates"].get("O_rate", "350,00"))
+        nitrogen_rate_entry.delete(0,"end"); nitrogen_rate_entry.insert(0, payload["rates"].get("N_rate", "550,00"))
+        al_nitrogen_rate_entry.delete(0,"end"); al_nitrogen_rate_entry.insert(0, payload["rates"].get("ALN_rate", "650,00"))
+        oxygen_rate_entry_TKW.delete(0,"end"); oxygen_rate_entry_TKW.insert(0, payload["rates"].get("O_rate_tkw", "262,50"))
+        nitrogen_rate_entry_TKW.delete(0,"end"); nitrogen_rate_entry_TKW.insert(0, payload["rates"].get("N_rate_tkw", "412,50"))
+        al_nitrogen_rate_entry_TKW.delete(0,"end"); al_nitrogen_rate_entry_TKW.insert(0, payload["rates"].get("ALN_rate_tkw", "487,50"))
+        bending_percent_entry_TKW.delete(0,"end"); bending_percent_entry_TKW.insert(0, payload["rates"].get("bend_percent_tkw", "75,00"))
+
+        # margins + ranges
+        material_margin_var.set(payload["margins"].get("material", "0,00"))
+        cutting_margin_var.set(payload["margins"].get("cutting", "0,00"))
+        min_area_var.set(payload["margins"].get("min_area", "0,00"))
+        max_area_var.set(payload["margins"].get("max_area", "1,00"))
+        min_cutting_var.set(payload["margins"].get("min_cut_len", "0,00"))
+        max_cutting_var.set(payload["margins"].get("max_cut_len", "5000,00"))
+
+        # calculated (restore labels, times, totals)
+        global oxygen_cutting_time, nitrogen_cutting_time, aluminum_nitrogen_cutting_time, total_material_cost
+        global total_row_iid, all_parts, total_price_per_order
+
+        calc = payload.get("calculated", {})
+        oxygen_cutting_time = float(calc.get("oxygen_cutting_time", 0.0))
+        nitrogen_cutting_time = float(calc.get("nitrogen_cutting_time", 0.0))
+        aluminum_nitrogen_cutting_time = float(calc.get("aluminum_nitrogen_cutting_time", 0.0))
+        total_material_cost = float(calc.get("total_material_cost", 0.0))
+        total_price_per_order = float(calc.get("total_price_per_order", 0.0))
+
+        # Przywracamy napisy (opcjonalnie — i tak przeliczymy dalej)
+        labels = calc.get("labels", {})
+        oxygen_time_label.config(text=labels.get("oxygen_time", "0,00"))
+        nitrogen_time_label.config(text=labels.get("nitrogen_time", "0,00"))
+        oxygen_cost_label.config(text=labels.get("oxygen_cost", "0,00"))
+        nitrogen_cost_label.config(text=labels.get("nitrogen_cost", "0,00"))
+        material_cost_label.config(text=labels.get("material_cost", "0,00"))
+        total_cutting_cost_label.config(text=labels.get("total_cutting_cost", "0,00"))
+        operational_cost_label.config(text=labels.get("operational_cost", "0,00"))
+        total_all_costs_label.config(text=labels.get("total_all_costs", "0,00"))
+        total_all_costs_entry.delete(0,"end"); total_all_costs_entry.insert(0, labels.get("total_for_correction", "0,00"))
+
+        # Rebuild tree + all_parts + thumbnails
+        for item in tree.get_children():
+            tree.delete(item)
+        thumbnail_imgs.clear()
+        all_parts = []
+
+        for p in payload.get("parts", []):
+            vals = p.get("values", [""]*11)
+            # wstaw do tree
+            iid = tree.insert('', 'end', values=vals)
+            # odtwórz miniaturę
+            b = _b64_decode(p.get("thumb_b64", ""))
+            if b:
+                try:
+                    img = ImageTk.PhotoImage(Image.open(io.BytesIO(b)).resize((80, 80)))
+                    tree.item(iid, image=img)
+                    thumbnail_imgs.append(img)  # prevent GC
+                except Exception:
+                    pass
+            # odtwórz all_parts (tyle ile potrzebujemy do przeliczeń i zapisu)
+            all_parts.append({
+                "thumb_data": b if b else None,
+                "cost_per_unit": p.get("cost_per_unit"),
+                "qty": p.get("qty"),
+                "bending_per_unit": p.get("bending_per_unit"),
+                "additional_per_unit": p.get("additional_per_unit"),
+                # można dodać inne pola według potrzeb analizy
+            })
+
+        # Dodaj / przelicz wiersz sumy
+        total_row_iid = None
+        update_total()
+        update_cost_calculations()
+
+        analysis_logger.log(f"Project loaded: {os.path.basename(path)}", "SUCCESS")
+        messagebox.showinfo("Loaded", f"Project loaded:\n{path}")
+
+    except Exception as e:
+        analysis_logger.log(f"Load failed: {e}", "ERROR")
+        messagebox.showerror("Error", f"Load failed:\n{e}")
 
 
 def SetTotalPricePerOrder(value):
@@ -401,6 +653,13 @@ scrollbar = ttk.Scrollbar(subpanel1, orient="vertical", command=tree.yview)
 tree.configure(yscrollcommand=scrollbar.set)
 tree.pack(side="left", fill="both", expand=True)
 scrollbar.pack(side="right", fill="y")
+
+
+# ========= BOTTOM-LEFT buttons (add to existing buttons_frame) =========
+ttk.Button(buttons_frame, text="Save Project", command=save_project_ui).grid(row=0, column=0, padx=5, pady=5, sticky="we")
+ttk.Button(buttons_frame, text="Load Project", command=load_project_ui).grid(row=0, column=1, padx=5, pady=5, sticky="we")
+buttons_frame.grid_columnconfigure(0, weight=1)
+buttons_frame.grid_columnconfigure(1, weight=1)
 
 def edit_cell(event):
     item = tree.identify_row(event.y)
@@ -2557,9 +2816,16 @@ def generate_report():
                                   f"• Raport klienta\n"
                                   f"• cost_calculation_log.txt")
 
-# left buttons
-ttk.Button(buttons_frame, text="Analyze XLSX", command=analyze_xlsx_folder).pack(side="left", padx=5)
-ttk.Button(buttons_frame, text="Generate report", command=generate_report).pack(side="left")
+# left buttons (use grid instead of pack)
+btn_analyze = ttk.Button(buttons_frame, text="Analyze XLSX", command=analyze_xlsx_folder)
+btn_analyze.grid(row=1, column=0, padx=5, pady=5, sticky="we")
+
+btn_report = ttk.Button(buttons_frame, text="Generate report", command=generate_report)
+btn_report.grid(row=1, column=1, padx=5, pady=5, sticky="we")
+
+# make columns expand nicely (do once for buttons_frame)
+buttons_frame.grid_columnconfigure(0, weight=1)
+buttons_frame.grid_columnconfigure(1, weight=1)
 
 # ---- sash setup ----
 def set_sash_positions(attempt=1):
