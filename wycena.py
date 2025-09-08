@@ -49,6 +49,7 @@ original_tree_data = []
 current_sort_column = None
 current_sort_reverse = False
 
+
 # ========= SAVE / LOAD PROJECT (one-file JSON with base64 images) =========
 def _b64_encode(b: bytes) -> str:
     return base64.b64encode(b).decode("ascii") if b is not None else ""
@@ -436,7 +437,7 @@ total_material_cost = 0.0
 
 # ---- GUI ----
 root = tk.Tk()
-root.title("Cost Report Generator – Enhanced with Dynamic Margins and TKW Analysis")
+root.title("Cost Report Generator – AVE 1.0 from 2025.09.08")
 root.configure(bg="#2c2c2c")  # Dark background for modern look
 
 # Use a modern ttk theme
@@ -777,8 +778,29 @@ def store_original_data():
             original_tree_data.append({
                 'values': item_data['values'],
                 'image': item_data.get('image', ''),
-                'tags': item_data.get('tags', ())
+                'tags': item_data.get('tags', ()),
             })
+
+
+def update_original_data(item):
+    """Update the stored original data for the edited item."""
+    global original_tree_data
+    # Get the current data from the tree item
+    item_data = tree.item(item)
+    current_values = item_data['values']
+    current_image = item_data.get('image', '')
+    current_tags = item_data.get('tags', ())
+    
+    # Use Nr (column 1) and SubNr (column 2) as unique key (assuming they are not editable and unique)
+    key = (current_values[0], current_values[1])
+    
+    # Find and update the corresponding entry in original_tree_data
+    for data_dict in original_tree_data:
+        if tuple(data_dict['values'][0:2]) == key:
+            data_dict['values'] = list(current_values)
+            data_dict['image'] = current_image
+            data_dict['tags'] = current_tags
+            break
 
 def apply_filters():
     """Apply filters to tree data"""
@@ -828,7 +850,7 @@ def apply_filters():
     # Move total row to end if exists
     if total_row_iid and total_row_iid in tree.get_children():
         tree.move(total_row_iid, '', 'end')
-    
+    update_total()  # Recalculate total after edit
     # Update status
     analysis_logger.log(f"Filter applied: {filtered_count} items shown", "INFO")
 
@@ -1099,9 +1121,10 @@ def edit_cell(event):
             vals[col_index] = e.get()
             tree.item(item, values=vals)
             e.destroy()
+            update_original_data(item)  # Update stored data after edit
             update_total()  # Recalculate total after edit
         e.bind("<Return>", save_edit); e.bind("<FocusOut>", save_edit)
-    #store_original_data()  # Update stored data after edit
+    
 
 
 
@@ -2323,7 +2346,6 @@ def analyze_xlsx_folder():
     # Update filter options after populating data
     store_original_data()
     update_filter_options()
-
     # Final summary
     analysis_logger.log("ANALYSIS COMPLETED - BASE PRICES + 7% MATERIAL MARGIN", "PHASE")
     analysis_logger.log(f"Total sheets: {total_sheets}", "INFO")
