@@ -44,7 +44,10 @@ from openpyxl.utils import get_column_letter
 from openpyxl.utils.units import pixels_to_EMU
 import base64, json
 
-
+# Global variables for filtering and sorting
+original_tree_data = []
+current_sort_column = None
+current_sort_reverse = False
 
 # ========= SAVE / LOAD PROJECT (one-file JSON with base64 images) =========
 def _b64_encode(b: bytes) -> str:
@@ -631,28 +634,446 @@ right_paned.pack(fill="both", expand=True)
 
 panel_a = tk.PanedWindow(right_paned, orient=tk.VERTICAL, bg="#2c2c2c", sashrelief="raised", borderwidth=1)
 
+
+
+
+# Initialize filter variables before Panel 1
+search_var = tk.StringVar()
+material_filter_var = tk.StringVar()
+thickness_filter_var = tk.StringVar()
+
 # --- PANEL 1 ---
 subpanel1 = tk.LabelFrame(panel_a, text="PANEL 1 – PREVIEW", bg="#2c2c2c", fg="white")
+
+# Add filter toolbar
+filter_toolbar = tk.Frame(subpanel1, bg="#2c2c2c", height=30)
+filter_toolbar.pack(side="top", fill="x", padx=5, pady=2)
+
+# Filter controls
+ttk.Label(filter_toolbar, text="Filter:").pack(side="left", padx=(0, 5))
+
+# Search entry for Name column
+search_var = tk.StringVar()
+search_entry = ttk.Entry(filter_toolbar, textvariable=search_var, width=20)
+search_entry.pack(side="left", padx=2)
+search_entry.bind('<KeyRelease>', lambda e: apply_filters())
+
+# Material filter combo
+material_filter_var = tk.StringVar()
+material_filter = ttk.Combobox(filter_toolbar, textvariable=material_filter_var, width=15, state="readonly")
+material_filter.pack(side="left", padx=2)
+material_filter.bind('<<ComboboxSelected>>', lambda e: apply_filters())
+
+# Thickness filter combo
+thickness_filter_var = tk.StringVar()
+thickness_filter = ttk.Combobox(filter_toolbar, textvariable=thickness_filter_var, width=10, state="readonly")
+thickness_filter.pack(side="left", padx=2)
+thickness_filter.bind('<<ComboboxSelected>>', lambda e: apply_filters())
+
+# Clear filters button
+ttk.Button(filter_toolbar, text="Clear Filters", command=lambda: clear_filters()).pack(side="left", padx=5)
+
+# Advanced filter button
+ttk.Button(filter_toolbar, text="Advanced Filter", command=lambda: show_advanced_filter()).pack(side="left", padx=2)
+
+# Export filtered button
+ttk.Button(filter_toolbar, text="Export Filtered", command=lambda: export_filtered_data()).pack(side="left", padx=2)
+
 columns = ("1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11")
 tree = ttk.Treeview(subpanel1, columns=columns, show="tree headings")
-tree.column("#0", width=150, minwidth=100, stretch=tk.NO)  # Increased width for better thumbnail visibility
-tree.heading("1", text="Nr");     tree.column("1", minwidth=50,  width=50,  stretch=tk.NO)
-tree.heading("2", text="SubNr");  tree.column("2", minwidth=50,  width=50,  stretch=tk.NO)
-tree.heading("3", text="Name");  tree.column("3", minwidth=150, width=400, stretch=tk.NO)
-tree.heading("4", text="Material"); tree.column("4", minwidth=50, width=80, stretch=tk.NO)
-tree.heading("5", text="Thickness");  tree.column("5", minwidth=50, width=80, stretch=tk.NO, anchor="e")
-tree.heading("6", text="Quantity");    tree.column("6", minwidth=50, width=80, stretch=tk.NO, anchor="e")
-tree.heading("7", text="L+M Cost");    tree.column("7", minwidth=50, width=100, stretch=tk.NO, anchor="e")
-tree.heading("8", text="Bending/pc."); tree.column("8", minwidth=50, width=100, stretch=tk.NO, anchor="e")
-tree.heading("9", text="Additional/pc."); tree.column("9", minwidth=50, width=120, stretch=tk.NO, anchor="e")
-tree.heading("10", text="Weight"); tree.column("10", minwidth=50, width=80, stretch=tk.NO, anchor="e")
-tree.heading("11", text="Cutting length"); tree.column("11", minwidth=50, width=120, stretch=tk.NO, anchor="e")
+tree.column("#0", width=150, minwidth=100, stretch=tk.NO)
+tree.heading("1", text="Nr ↕");     tree.column("1", minwidth=50,  width=50,  stretch=tk.NO)
+tree.heading("2", text="SubNr ↕");  tree.column("2", minwidth=50,  width=50,  stretch=tk.NO)
+tree.heading("3", text="Name ↕");  tree.column("3", minwidth=150, width=400, stretch=tk.NO)
+tree.heading("4", text="Material ↕"); tree.column("4", minwidth=50, width=80, stretch=tk.NO)
+tree.heading("5", text="Thickness ↕");  tree.column("5", minwidth=50, width=80, stretch=tk.NO, anchor="e")
+tree.heading("6", text="Quantity ↕");    tree.column("6", minwidth=50, width=80, stretch=tk.NO, anchor="e")
+tree.heading("7", text="L+M Cost ↕");    tree.column("7", minwidth=50, width=100, stretch=tk.NO, anchor="e")
+tree.heading("8", text="Bending/pc. ↕"); tree.column("8", minwidth=50, width=100, stretch=tk.NO, anchor="e")
+tree.heading("9", text="Additional/pc. ↕"); tree.column("9", minwidth=50, width=120, stretch=tk.NO, anchor="e")
+tree.heading("10", text="Weight ↕"); tree.column("10", minwidth=50, width=80, stretch=tk.NO, anchor="e")
+tree.heading("11", text="Cutting length ↕"); tree.column("11", minwidth=50, width=120, stretch=tk.NO, anchor="e")
 
 # Add scrollbar for treeview
 scrollbar = ttk.Scrollbar(subpanel1, orient="vertical", command=tree.yview)
 tree.configure(yscrollcommand=scrollbar.set)
 tree.pack(side="left", fill="both", expand=True)
 scrollbar.pack(side="right", fill="y")
+
+# Store original data for filtering
+original_tree_data = []
+current_sort_column = None
+current_sort_reverse = False
+
+# Sorting functionality
+def sort_treeview(col):
+    """Sort treeview by clicked column"""
+    global current_sort_column, current_sort_reverse, total_row_iid
+    
+    # Toggle sort direction if same column clicked
+    if current_sort_column == col:
+        current_sort_reverse = not current_sort_reverse
+    else:
+        current_sort_reverse = False
+        current_sort_column = col
+    
+    # Get all items except total row
+    items = []
+    for item in tree.get_children():
+        if item != total_row_iid:
+            items.append((item, tree.item(item)))
+    
+    # Determine column index (columns are "1", "2", etc.)
+    col_index = int(col) - 1
+    
+    # Sort items
+    def get_sort_key(item_tuple):
+        values = item_tuple[1]['values']
+        if col_index < len(values):
+            val = values[col_index]
+            # Try to convert to number for numeric columns
+            if col_index in [0, 1, 4, 5, 6, 7, 8, 9, 10]:  # Numeric columns
+                try:
+                    # Remove formatting and convert to float
+                    val_str = str(val).replace(',', '.').replace(' ', '')
+                    return float(val_str) if val_str else 0
+                except:
+                    return 0
+            return str(val).lower()
+        return ""
+    
+    items.sort(key=get_sort_key, reverse=current_sort_reverse)
+    
+    # Reorder items in tree
+    for index, (item_id, item_data) in enumerate(items):
+        tree.move(item_id, '', index)
+    
+    # Move total row to end if it exists
+    if total_row_iid and total_row_iid in tree.get_children():
+        tree.move(total_row_iid, '', 'end')
+    
+    # Update column headers to show sort direction
+    for i in range(1, 12):
+        header_text = tree.heading(str(i))['text'].replace(' ↑', '').replace(' ↓', '').replace(' ↕', '')
+        if str(i) == col:
+            if current_sort_reverse:
+                tree.heading(str(i), text=header_text + ' ↓')
+            else:
+                tree.heading(str(i), text=header_text + ' ↑')
+        else:
+            tree.heading(str(i), text=header_text + ' ↕')
+
+# Bind sorting to column headers
+for col in columns:
+    tree.heading(col, command=lambda c=col: sort_treeview(c))
+
+def store_original_data():
+    """Store original tree data for filtering"""
+    global original_tree_data, total_row_iid
+    original_tree_data = []
+    for item in tree.get_children():
+        if item != total_row_iid:
+            item_data = tree.item(item)
+            original_tree_data.append({
+                'values': item_data['values'],
+                'image': item_data.get('image', ''),
+                'tags': item_data.get('tags', ())
+            })
+
+def apply_filters():
+    """Apply filters to tree data"""
+    global total_row_iid, original_tree_data
+    
+    if not original_tree_data:
+        store_original_data()
+    
+    # Get filter values
+    search_text = search_var.get().lower()
+    material_filter = material_filter_var.get()
+    thickness_filter = thickness_filter_var.get()
+    
+    # Clear tree except total row
+    for item in tree.get_children():
+        if item != total_row_iid:
+            tree.delete(item)
+    
+    # Apply filters and repopulate
+    filtered_count = 0
+    for data in original_tree_data:
+        values = data['values']
+        
+        # Apply filters
+        show = True
+        
+        # Name filter (search)
+        if search_text and search_text not in str(values[2]).lower():
+            show = False
+        
+        # Material filter
+        if material_filter and material_filter != "All" and str(values[3]) != material_filter:
+            show = False
+        
+        # Thickness filter
+        if thickness_filter and thickness_filter != "All" and str(values[4]) != thickness_filter:
+            show = False
+        
+        if show:
+            item = tree.insert('', 'end', values=values)
+            if data.get('image'):
+                tree.item(item, image=data['image'])
+            if data.get('tags'):
+                tree.item(item, tags=data['tags'])
+            filtered_count += 1
+    
+    # Move total row to end if exists
+    if total_row_iid and total_row_iid in tree.get_children():
+        tree.move(total_row_iid, '', 'end')
+    
+    # Update status
+    analysis_logger.log(f"Filter applied: {filtered_count} items shown", "INFO")
+
+def clear_filters():
+    """Clear all filters and restore original data"""
+    search_var.set("")
+    material_filter_var.set("All")
+    thickness_filter_var.set("All")
+    apply_filters()
+    analysis_logger.log("Filters cleared", "INFO")
+
+def update_filter_options():
+    """Update filter combobox options based on current data"""
+    materials = set()
+    thicknesses = set()
+    
+    for item in tree.get_children():
+        if item != total_row_iid:
+            values = tree.item(item)['values']
+            if len(values) > 3:
+                materials.add(str(values[3]))
+            if len(values) > 4:
+                thicknesses.add(str(values[4]))
+    
+    material_filter['values'] = ['All'] + sorted(list(materials))
+    thickness_filter['values'] = ['All'] + sorted(list(thicknesses))
+    material_filter_var.set("All")
+    thickness_filter_var.set("All")
+
+def show_advanced_filter():
+    """Show advanced filter dialog"""
+    filter_window = tk.Toplevel(root)
+    filter_window.title("Advanced Filter")
+    filter_window.geometry("600x500")
+    filter_window.configure(bg="#2c2c2c")
+    
+    # Create notebook for different filter types
+    notebook = ttk.Notebook(filter_window)
+    notebook.pack(fill="both", expand=True, padx=10, pady=10)
+    
+    # Name filter tab
+    name_frame = tk.Frame(notebook, bg="#2c2c2c")
+    notebook.add(name_frame, text="Name Filter")
+    
+    ttk.Label(name_frame, text="Select items to show:").pack(pady=10)
+    
+    # Listbox with checkbuttons
+    list_frame = tk.Frame(name_frame, bg="#2c2c2c")
+    list_frame.pack(fill="both", expand=True, padx=10)
+    
+    list_scrollbar = ttk.Scrollbar(list_frame)
+    list_scrollbar.pack(side="right", fill="y")
+    
+    name_listbox = tk.Listbox(list_frame, selectmode="multiple", yscrollcommand=list_scrollbar.set,
+                              bg="#3c3c3c", fg="white")
+    name_listbox.pack(side="left", fill="both", expand=True)
+    list_scrollbar.config(command=name_listbox.yview)
+    
+    # Get unique names
+    names = set()
+    for data in original_tree_data:
+        if len(data['values']) > 2:
+            names.add(str(data['values'][2]))
+    
+    for name in sorted(names):
+        name_listbox.insert(tk.END, name)
+    
+    # Select all by default
+    name_listbox.select_set(0, tk.END)
+    
+    # Buttons
+    button_frame = tk.Frame(name_frame, bg="#2c2c2c")
+    button_frame.pack(pady=10)
+    
+    ttk.Button(button_frame, text="Select All", 
+              command=lambda: name_listbox.select_set(0, tk.END)).pack(side="left", padx=5)
+    ttk.Button(button_frame, text="Clear All", 
+              command=lambda: name_listbox.select_clear(0, tk.END)).pack(side="left", padx=5)
+    
+    # Numeric filter tab
+    numeric_frame = tk.Frame(notebook, bg="#2c2c2c")
+    notebook.add(numeric_frame, text="Numeric Filters")
+    
+    # Quantity filter
+    ttk.Label(numeric_frame, text="Quantity Range:").grid(row=0, column=0, sticky="w", padx=10, pady=5)
+    qty_min_var = tk.StringVar()
+    qty_max_var = tk.StringVar()
+    ttk.Entry(numeric_frame, textvariable=qty_min_var, width=10).grid(row=0, column=1, padx=5)
+    ttk.Label(numeric_frame, text="to").grid(row=0, column=2)
+    ttk.Entry(numeric_frame, textvariable=qty_max_var, width=10).grid(row=0, column=3, padx=5)
+    
+    # Cost filter
+    ttk.Label(numeric_frame, text="L+M Cost Range:").grid(row=1, column=0, sticky="w", padx=10, pady=5)
+    cost_min_var = tk.StringVar()
+    cost_max_var = tk.StringVar()
+    ttk.Entry(numeric_frame, textvariable=cost_min_var, width=10).grid(row=1, column=1, padx=5)
+    ttk.Label(numeric_frame, text="to").grid(row=1, column=2)
+    ttk.Entry(numeric_frame, textvariable=cost_max_var, width=10).grid(row=1, column=3, padx=5)
+    
+    # Weight filter
+    ttk.Label(numeric_frame, text="Weight Range:").grid(row=2, column=0, sticky="w", padx=10, pady=5)
+    weight_min_var = tk.StringVar()
+    weight_max_var = tk.StringVar()
+    ttk.Entry(numeric_frame, textvariable=weight_min_var, width=10).grid(row=2, column=1, padx=5)
+    ttk.Label(numeric_frame, text="to").grid(row=2, column=2)
+    ttk.Entry(numeric_frame, textvariable=weight_max_var, width=10).grid(row=2, column=3, padx=5)
+    
+    def apply_advanced_filter():
+        """Apply advanced filters"""
+        global total_row_iid
+        
+        # Get selected names
+        selected_indices = name_listbox.curselection()
+        selected_names = [name_listbox.get(i) for i in selected_indices]
+        
+        # Get numeric ranges
+        qty_min = _parse_float(qty_min_var.get()) if qty_min_var.get() else None
+        qty_max = _parse_float(qty_max_var.get()) if qty_max_var.get() else None
+        cost_min = _parse_float(cost_min_var.get()) if cost_min_var.get() else None
+        cost_max = _parse_float(cost_max_var.get()) if cost_max_var.get() else None
+        weight_min = _parse_float(weight_min_var.get()) if weight_min_var.get() else None
+        weight_max = _parse_float(weight_max_var.get()) if weight_max_var.get() else None
+        
+        # Clear tree
+        for item in tree.get_children():
+            if item != total_row_iid:
+                tree.delete(item)
+        
+        # Apply filters
+        filtered_count = 0
+        for data in original_tree_data:
+            values = data['values']
+            show = True
+            
+            # Name filter
+            if len(values) > 2 and str(values[2]) not in selected_names:
+                show = False
+            
+            # Quantity filter
+            if show and qty_min is not None and len(values) > 5:
+                qty = _parse_float(values[5])
+                if qty is None or qty < qty_min:
+                    show = False
+            if show and qty_max is not None and len(values) > 5:
+                qty = _parse_float(values[5])
+                if qty is None or qty > qty_max:
+                    show = False
+            
+            # Cost filter
+            if show and cost_min is not None and len(values) > 6:
+                cost = _parse_float(values[6])
+                if cost is None or cost < cost_min:
+                    show = False
+            if show and cost_max is not None and len(values) > 6:
+                cost = _parse_float(values[6])
+                if cost is None or cost > cost_max:
+                    show = False
+            
+            # Weight filter
+            if show and weight_min is not None and len(values) > 9:
+                weight = _parse_float(values[9])
+                if weight is None or weight < weight_min:
+                    show = False
+            if show and weight_max is not None and len(values) > 9:
+                weight = _parse_float(values[9])
+                if weight is None or weight > weight_max:
+                    show = False
+            
+            if show:
+                item = tree.insert('', 'end', values=values)
+                if data.get('image'):
+                    tree.item(item, image=data['image'])
+                filtered_count += 1
+        
+        # Move total row to end
+        if total_row_iid and total_row_iid in tree.get_children():
+            tree.move(total_row_iid, '', 'end')
+        
+        analysis_logger.log(f"Advanced filter applied: {filtered_count} items shown", "SUCCESS")
+        filter_window.destroy()
+    
+    # OK and Cancel buttons
+    button_frame2 = tk.Frame(filter_window, bg="#2c2c2c")
+    button_frame2.pack(side="bottom", pady=10)
+    
+    ttk.Button(button_frame2, text="Apply Filter", command=apply_advanced_filter).pack(side="left", padx=5)
+    ttk.Button(button_frame2, text="Cancel", command=filter_window.destroy).pack(side="left", padx=5)
+
+def export_filtered_data():
+    """Export currently filtered data to Excel"""
+    if not tree.get_children():
+        messagebox.showwarning("Warning", "No data to export")
+        return
+    
+    file_path = filedialog.asksaveasfilename(
+        defaultextension=".xlsx",
+        filetypes=[("Excel files", "*.xlsx"), ("All files", "*.*")],
+        initialfile=f"filtered_data_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx"
+    )
+    
+    if not file_path:
+        return
+    
+    try:
+        wb = Workbook()
+        ws = wb.active
+        ws.title = "Filtered Data"
+        
+        # Headers
+        headers = ["Nr", "SubNr", "Name", "Material", "Thickness", "Quantity", 
+                  "L+M Cost", "Bending/pc.", "Additional/pc.", "Weight", "Cutting length"]
+        for col, header in enumerate(headers, 1):
+            cell = ws.cell(row=1, column=col, value=header)
+            cell.font = Font(bold=True)
+            cell.fill = PatternFill(start_color="366092", end_color="366092", fill_type="solid")
+        
+        # Data
+        row_num = 2
+        for item in tree.get_children():
+            if item != total_row_iid:
+                values = tree.item(item)['values']
+                for col, value in enumerate(values, 1):
+                    ws.cell(row=row_num, column=col, value=value)
+                row_num += 1
+        
+        # Autofit columns
+        for column in ws.columns:
+            max_length = 0
+            column_letter = column[0].column_letter
+            for cell in column:
+                try:
+                    if cell.value:
+                        max_length = max(max_length, len(str(cell.value)))
+                except:
+                    pass
+            adjusted_width = min(max_length + 2, 50)
+            ws.column_dimensions[column_letter].width = adjusted_width
+        
+        wb.save(file_path)
+        analysis_logger.log(f"Filtered data exported to {os.path.basename(file_path)}", "SUCCESS")
+        messagebox.showinfo("Success", f"Data exported successfully to:\n{file_path}")
+        
+    except Exception as e:
+        analysis_logger.log(f"Failed to export data: {str(e)}", "ERROR")
+        messagebox.showerror("Error", f"Failed to export data:\n{str(e)}")
 
 
 # ========= BOTTOM-LEFT buttons (add to existing buttons_frame) =========
@@ -680,6 +1101,9 @@ def edit_cell(event):
             e.destroy()
             update_total()  # Recalculate total after edit
         e.bind("<Return>", save_edit); e.bind("<FocusOut>", save_edit)
+    #store_original_data()  # Update stored data after edit
+
+
 
 tree.bind("<Double-1>", edit_cell)
 panel_a.add(subpanel1, minsize=220)
@@ -1896,6 +2320,10 @@ def analyze_xlsx_folder():
     last_total_cost = total_sum
     last_folder_path = folder_path
     
+    # Update filter options after populating data
+    store_original_data()
+    update_filter_options()
+
     # Final summary
     analysis_logger.log("ANALYSIS COMPLETED - BASE PRICES + 7% MATERIAL MARGIN", "PHASE")
     analysis_logger.log(f"Total sheets: {total_sheets}", "INFO")
