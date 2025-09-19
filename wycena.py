@@ -2818,8 +2818,8 @@ def generate_report():
         mat_cost = part['adj_weight'] * part.get('base_price_per_kg', 0.0) 
         
         # Get cutting time per part
-        part_cutting_time = part.get('cuuting_speed_m_min', 0.0) * part.get('cut_length', 0.0) / 60.0  # in hours
-            
+        part_cutting_time = (part.get('cut_length', 0.0) / part.get('cuuting_speed_m_min', 0.0) ) / 60.0  # in hours
+        
         # Calculate TKW cutting cost based on gas type
         gas_type = part.get('gas_key', 'O')
         material_name = part.get('material', '')
@@ -2895,7 +2895,7 @@ def generate_report():
         cell.number_format = '#,##0.00'
         
         # Koszt jednostkowy [PLN] - sum of all components
-        cell = detail_ws.cell(row=row_num, column=17, value=f"=SUM({col_letter(10)}{row_num}:{col_letter(16)}{row_num})")
+        cell = detail_ws.cell(row=row_num, column=17, value=f"=SUM({col_letter(10)}{row_num}:{col_letter(16)}{row_num})-{col_letter(11)}{row_num}")
         cell.number_format = '#,##0.00'
         
         # Koszt całkowity [PLN] - unit cost * quantity
