@@ -35,6 +35,7 @@ from docx.shared import Inches, RGBColor, Pt, Cm
 from docx.enum.text import WD_ALIGN_PARAGRAPH
 from docx.oxml.ns import qn
 from docx.oxml import OxmlElement
+from docx2pdf import convert   
 import io
 from PIL import Image, ImageTk
 import locale
@@ -1620,32 +1621,162 @@ def load_material_prices(preview=False):
 
 def load_cutting_prices(preview=False):
     global cutting_prices, _mat_set, _thk_set, _gas_set
-    cutting_prices.clear(); _gas_set.clear()
+    cutting_prices.clear()
+    _gas_set.clear()
+    
     try:
         if not os.path.exists(CUTTING_FILE):
             raise FileNotFoundError(f"File not found: {CUTTING_FILE}")
+        
         wb = load_workbook(CUTTING_FILE, data_only=True)
         sheet = wb.active
         headers = [str(c.value).strip().lower() if c.value is not None else "" for c in next(sheet.iter_rows(min_row=1, max_row=1))]
-        need = ("thickness", "material", "gas", "price")
-        idx = {n: headers.index(n) for n in need if n in headers}
-        if not set(need).issubset(idx):
-            raise ValueError("Missing required columns: thickness, material, gas, price")
-        if preview: _tree_preview_clear_and_headers(["cutting prices.xlsx → thickness/material/gas/price"])
+        
+        # Rozszerzone wymagane kolumny
+        required = ("thickness", "material", "gas", "price")
+        optional = ("speed", "hour_price", "utilization")
+        
+        # Indeksy dla wymaganych kolumn
+        idx = {n: headers.index(n) for n in required if n in headers}
+        if not set(required).issubset(idx):
+            raise ValueError(f"Missing required columns: {set(required) - set(idx.keys())}")
+        
+        # Indeksy dla opcjonalnych kolumn
+        opt_idx = {n: headers.index(n) if n in headers else None for n in optional}
+        
+        if preview: 
+            _tree_preview_clear_and_headers(["cutting prices.xlsx → thickness/material/gas/price/speed/hour_price/utilization"])
+        
         for row in sheet.iter_rows(min_row=2, values_only=True):
-            thk = _parse_float(row[idx["thickness"]]); mat = _norm_s(row[idx["material"]]); gas = _norm_s(row[idx["gas"]]); prc = _parse_float(row[idx["price"]])
+            thk = _parse_float(row[idx["thickness"]])
+            mat = _norm_s(row[idx["material"]])
+            gas = _norm_s(row[idx["gas"]])
+            prc = _parse_float(row[idx["price"]])
+            
             if thk is not None and mat and gas and prc is not None:
-                cutting_prices[(thk, mat, gas)] = prc; _mat_set.add(mat); _thk_set.add(thk); _gas_set.add(gas)
-                if preview: tree.insert('', 'end', values=("", "", f"{thk:.2f} mm / {mat} / {gas} → {format_pln(prc)} PLN/m", "", "", "", "", "", ""))
-        mats_sorted = sorted(_mat_set); thk_sorted = [f"{t:.2f}".rstrip("0").rstrip(".") for t in sorted(_thk_set)]; gas_sorted = sorted(_gas_set)
+                # Struktura danych z dodatkowymi polami
+                cutting_data = {
+                    'price': prc,
+                    'speed': _parse_float(row[opt_idx["speed"]]) if opt_idx["speed"] is not None else None,
+                    'hour_price': _parse_float(row[opt_idx["hour_price"]]) if opt_idx["hour_price"] is not None else None,
+                    'utilization': _parse_float(row[opt_idx["utilization"]]) if opt_idx["utilization"] is not None else None
+                }
+                
+                cutting_prices[(thk, mat, gas)] = cutting_data
+                _mat_set.add(mat)
+                _thk_set.add(thk)
+                _gas_set.add(gas)
+                
+                if preview:
+                    speed_str = f"{cutting_data['speed']:.1f}" if cutting_data['speed'] is not None else "N/A"
+                    hour_price_str = f"{cutting_data['hour_price']:.0f}" if cutting_data['hour_price'] is not None else "N/A"
+                    util_str = f"{cutting_data['utilization']:.2f}" if cutting_data['utilization'] is not None else "N/A"
+                    
+                    tree.insert('', 'end', values=(
+                        "", "", 
+                        f"{thk:.2f} mm / {mat} / {gas} → {format_pln(prc)} PLN/m | Speed: {speed_str} | H.Price: {hour_price_str} | Util: {util_str}", 
+                        "", "", "", "", "", ""
+                    ))
+        
+        # Sortowanie i aktualizacja comboboxów
+        mats_sorted = sorted(_mat_set)
+        thk_sorted = [f"{t:.2f}".rstrip("0").rstrip(".") for t in sorted(_thk_set)]
+        gas_sorted = sorted(_gas_set)
+        
         material_cut_cb["values"] = mats_sorted
-        if not material_cb["values"]: material_cb["values"] = mats_sorted
+        if not material_cb["values"]: 
+            material_cb["values"] = mats_sorted
         thickness_cut_cb["values"] = thk_sorted
-        if not thickness_mat_cb["values"]: thickness_mat_cb["values"] = thk_sorted
+        if not thickness_mat_cb["values"]: 
+            thickness_mat_cb["values"] = thk_sorted
         gas_cb["values"] = gas_sorted
+        
         _update_led(cutting_led, len(cutting_prices) > 0)
+        
     except Exception as e:
-        _update_led(cutting_led, False); messagebox.showerror("Error", f"Loading cutting prices:\n{e}")
+        _update_led(cutting_led, False)
+        messagebox.showerror("Error", f"Loading cutting prices:\n{e}")
+
+
+
+
+# Metody do pobierania danych
+#  Jeśli w aktualnym kodzie masz fragmenty w stylu:
+#    pythonprice = cutting_prices[(thickness, material, gas)]
+#  Musisz je zmienić na:
+#    pythonprice = cutting_prices[(thickness, material, gas)]['price']
+# LUB lepiej:
+#    price = get_cutting_price(thickness, material, gas)
+#   
+
+# Pobieranie pojedynczych wartości
+#   pythonthickness, material, gas = 2.0, "ALUMINIUM", "N"
+#   price = get_cutting_price(thickness, material, gas)
+#   speed = get_cutting_speed(thickness, material, gas) 
+#   hour_price = get_cutting_hour_price(thickness, material, gas)
+#   utilization = get_cutting_utilization(thickness, material, gas)
+
+# Pobieranie wszystkich danych naraz
+#   all_data = get_cutting_all_data(thickness, material, gas)
+
+def get_cutting_price(thickness, material, gas):
+    """Pobiera cenę cięcia dla podanych parametrów"""
+    key = (thickness, material, gas)
+    if key in cutting_prices:
+        return cutting_prices[key]['price']
+    return None
+
+
+def get_cutting_speed(thickness, material, gas):
+    """Pobiera prędkość cięcia dla podanych parametrów"""
+    key = (thickness, material, gas)
+    if key in cutting_prices:
+        return cutting_prices[key]['speed']
+    return None
+
+
+def get_cutting_hour_price(thickness, material, gas):
+    """Pobiera cenę godzinową dla podanych parametrów"""
+    key = (thickness, material, gas)
+    if key in cutting_prices:
+        return cutting_prices[key]['hour_price']
+    return None
+
+
+def get_cutting_utilization(thickness, material, gas):
+    """Pobiera wykorzystanie dla podanych parametrów"""
+    key = (thickness, material, gas)
+    if key in cutting_prices:
+        return cutting_prices[key]['utilization']
+    return None
+
+
+def get_cutting_all_data(thickness, material, gas):
+    """Pobiera wszystkie dane cięcia dla podanych parametrów"""
+    key = (thickness, material, gas)
+    if key in cutting_prices:
+        data = cutting_prices[key].copy()
+        data['thickness'] = thickness
+        data['material'] = material
+        data['gas'] = gas
+        return data
+    return None
+
+
+def get_cutting_data_dict(thickness, material, gas):
+    """Zwraca słownik z wszystkimi danymi cięcia"""
+    key = (thickness, material, gas)
+    if key in cutting_prices:
+        return {
+            'thickness': thickness,
+            'material': material,
+            'gas': gas,
+            'price': cutting_prices[key]['price'],
+            'speed': cutting_prices[key]['speed'],
+            'hour_price': cutting_prices[key]['hour_price'],
+            'utilization': cutting_prices[key]['utilization']
+        }
+    return None
 
 # ---- UI tests (Panel 3) ----
 def ui_find_material_price():
@@ -2148,6 +2279,7 @@ def analyze_xlsx_folder():
 
                 # Calculate base costs with ONLY 7% material margin (automatic)
                 base_material_cost = adj_weight * base_price_per_kg
+                base_rate_per_cut_length = get_cutting_price(thk_val,mat_norm, gas_key)
                 base_cut_cost = cut_length * base_rate_per_cut_length
                 
                 # Apply ONLY mandatory 7% minimum material cost increase
@@ -2167,8 +2299,12 @@ def analyze_xlsx_folder():
                     'subnr': subnr,
                     'name': part_name,
                     'material': material_name,
+                    'gas_key': gas_key,
                     'thickness': thk_val,
                     'qty': int(part_qty) if isinstance(part_qty, (int, float)) else 0,
+                    'cuuting_speed_m_min': get_cutting_speed(thk_val, material_name, gas_key),
+                    'hour_price' : get_cutting_hour_price(thk_val, material_name, gas_key),
+                    'utilization' : get_cutting_utilization(thk_val, material_name, gas_key),
                     'cost_per_unit': float(f"{total_part:.2f}"),
                     'base_cost_per_unit': float(f"{base_total_part:.2f}"),
                     'bending_per_unit': 0.0,
@@ -2613,11 +2749,14 @@ def generate_report():
         for r in pf.runs:
             r.font.size = Pt(9)
 
-    current_date = datetime.datetime.now().strftime("%Y%m%d")
+    current_date = datetime.datetime.now().strftime("%Y-%m-%d")
     fname = f"Oferta_{sanitize_filename(customer_name) or 'Klient'}_{current_date}_{offer_number.replace('/', '-')}.docx"
     full = os.path.join(raporty_path, fname)
     try:
         doc.save(full)
+        # Zapis PDF pod tą samą nazwą
+        pdf_full = full.replace(".docx", ".pdf")
+        convert(full, pdf_full)
     except Exception as e:
         messagebox.showerror("Error", f"Failed to save DOCX file:\n{e}")
         return
@@ -2679,10 +2818,10 @@ def generate_report():
         mat_cost = part['adj_weight'] * part.get('base_price_per_kg', 0.0) 
         
         # Get cutting time per part
-        part_cutting_time = part.get('cutting_time', 0.0)
+        part_cutting_time = part.get('cuuting_speed_m_min', 0.0) * part.get('cut_length', 0.0) / 60.0  # in hours
             
         # Calculate TKW cutting cost based on gas type
-        gas_type = part.get('gas_type', 'O')
+        gas_type = part.get('gas_key', 'O')
         material_name = part.get('material', '')
         
         if gas_type == 'O':
